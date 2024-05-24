@@ -123,7 +123,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             elif isinstance(comparators, (ast.Str, ast.Name)):
                 test = f"({self.get_node_value(comparators)}.contains({left}))"
         else:
-            test = self.get_node_value(node.test)
+            test = self.get_node_value(node.test)  # Remove parenthesize argument
 
         self.berry_code.append(f"{self.indent()}if {test}")
         self.indentation += 1
@@ -275,7 +275,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return node.id
         return ""
 
-    def get_node_value(self, node):
+    def get_node_value(self, node, parenthesize=False):
         if isinstance(node, ast.Lambda):
             return self.visit_Lambda(node)
         elif isinstance(node, ast.FunctionDef):
@@ -292,30 +292,35 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elif isinstance(node, ast.Subscript):
             return f"{self.get_node_value(node.value)}[{self.get_subscript(node.slice)}]"
         elif isinstance(node, ast.BinOp):
-            left = self.get_node_value(node.left)
-            right = self.get_node_value(node.right)
+            left = self.get_node_value(node.left, parenthesize=True)
+            right = self.get_node_value(node.right, parenthesize=True)
             op = self.get_operator(node.op)
-            return f"{left} {op} {right}"
+            result = f"{left} {op} {right}"
+            return f"({result})" if parenthesize else result
         elif isinstance(node, ast.UnaryOp):
             op = self.get_operator(node.op)
             operand = self.get_node_value(node.operand)
-            if op == "not ":
-                return f"{op}({operand})"
-            return f"{op}{operand}"
+            result = f"{op}{operand}"
+            return f"({result})" if parenthesize else result
         elif isinstance(node, ast.BoolOp):
             op = ' and ' if isinstance(node.op, ast.And) else ' or '
-            values = [self.get_node_value(v) for v in node.values]
-            return f"({op.join(values)})"
+            values = [self.get_node_value(v, parenthesize=True) for v in node.values]
+            result = f"({op.join(values)})"
+            return f"({result})" if parenthesize else result
         elif isinstance(node, ast.Compare):
+            left = self.get_node_value(node.left)
+            right = self.get_node_value(node.comparators[0])
             if isinstance(node.ops[0], ast.IsNot):
-                left = self.get_node_value(node.left)
-                right = self.get_node_value(node.comparators[0])
-                return f"{left} != {right}"
+                result = f"{left} != {right}"
+            else:
+                result = f"{left} {self.get_operator(node.ops[0])} {right}"
+            return f"({result})" if parenthesize else result
         elif isinstance(node, ast.IfExp):
             body = self.get_node_value(node.body)
             test = self.get_node_value(node.test)
             orelse = self.get_node_value(node.orelse)
-            return f"{body} if {test} else {orelse}"
+            result = f"{body} if {test} else {orelse}"
+            return f"({result})" if parenthesize else result
         elif isinstance(node, ast.Dict):
             return self.visit_Dict(node)
         elif isinstance(node, ast.List):
@@ -399,8 +404,11 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return "//"
         elif isinstance(op, ast.Not):
             return "not "
+        elif isinstance(op, ast.IsNot):
+            return "!="
         else:
             return ""
+
 
     def convert(self, source_code):
         # Store the source code lines for error context

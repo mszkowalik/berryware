@@ -29,9 +29,6 @@ end"""
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
-
-
-
     def test_if_else_conversion(self):
         source_code = """
 if not (self.collect_data or self.hems_collect_data or self.hems_check_data):
@@ -51,7 +48,6 @@ else
 end"""
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
-
 
     def test_augmented_assignment_conversion(self):
         source_code = """
@@ -173,6 +169,24 @@ class TestClass
         tasmota.set_timer(self.interval * 1000, /-> self.start_over(), self.timer)
         tasmota.set_timer(self.interval, /-> self.start_over(), self.timer)
     end
+end"""
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
+        self.assertEqual(berry_code.strip(), expected_output.strip())
+
+    def test_parentheses(self):
+        source_code = """
+if (self.value == self.value2):
+    self.do_something()
+if self.value == self.value2:
+    self.do_something()
+"""
+        expected_output = """
+if self.value == self.value2
+    self.do_something()
+end
+if self.value == self.value2
+    self.do_something()
 end"""
         berry_code = self.converter.convert(source_code)
         print(f"DEBUG: Berry code generated: {berry_code}")
