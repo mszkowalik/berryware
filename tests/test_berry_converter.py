@@ -82,9 +82,7 @@ self.address_map = {
     "3034": {"name": 'PV-V-A', "functioncode": 4, "type": "uint16", "count": 1, "sum": 0}
 }
 """
-        expected_output = """self.address_map = {
-    "3034": {"name": 'PV-V-A', "functioncode": 4, "type": "uint16", "count": 1, "sum": 0}
-}"""
+        expected_output = """self.address_map = {'3034': {'name': 'PV-V-A', 'functioncode': 4, 'type': 'uint16', 'count': 1, 'sum': 0}}"""
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
@@ -101,7 +99,7 @@ self.hems_sequencer = []
 if "mode" in msg:
     self.handle_mode()
 """
-        expected_output = """if (msg.contains("mode"))
+        expected_output = """if (msg.contains('mode'))
     self.handle_mode()
 end"""
         berry_code = self.converter.convert(source_code)
@@ -112,10 +110,27 @@ end"""
 if delay is not None:
     self.set_delay(delay)
 """
-        expected_output = """if delay != None
+        expected_output = """if delay != nil
     self.set_delay(delay)
 end"""
         berry_code = self.converter.convert(source_code)
+        self.assertEqual(berry_code.strip(), expected_output.strip())
+
+    def test_exception_handling(self):
+        source_code = """
+try:
+    self.mqtt_data()
+except Exception as error_msg:
+    print("Wrong mqtt query: ", error_msg)
+"""
+        expected_output = """
+try
+    self.mqtt_data()
+except .. as error_msg
+    print('Wrong mqtt query: ', error_msg)
+end"""
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
 if __name__ == '__main__':

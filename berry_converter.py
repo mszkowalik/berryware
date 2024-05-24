@@ -39,11 +39,38 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.indentation -= 1
         self.berry_code.append(f"{self.indent()}end")
 
+    def visit_Try(self, node):
+        self.berry_code.append(f"{self.indent()}try")
+        self.indentation += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indentation -= 1
+
+        for handler in node.handlers:
+            if handler.type is None:
+                self.berry_code.append(f"{self.indent()}except .. as {handler.name}")
+            else:
+                # We don't need to handle specific exception types, so we just use `..`
+                self.berry_code.append(f"{self.indent()}except .. as {handler.name}")
+            self.indentation += 1
+            for stmt in handler.body:
+                self.visit(stmt)
+            self.indentation -= 1
+
+        if node.finalbody:
+            self.berry_code.append(f"{self.indent()}finally")
+            self.indentation += 1
+            for stmt in node.finalbody:
+                self.visit(stmt)
+            self.indentation -= 1
+
+        self.berry_code.append(f"{self.indent()}end")
+
     def visit_Assign(self, node):
         targets = [self.get_target(target) for target in node.targets]
         value = self.get_node_value(node.value)
-        # if isinstance(node.value, ast.List):
-        #     value = '[]'
+        if isinstance(node.value, ast.List):
+            value = '[]'
         self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
 
     def visit_Expr(self, node):
