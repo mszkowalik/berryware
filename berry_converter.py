@@ -7,7 +7,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.source_lines = []
         self.name_changes = {
             'json.loads': 'json.load',
-            'float': 'real'
+            'float': 'real',
+            'None': 'nil',
         }
 
     def set_source_code(self, source_code):
@@ -41,6 +42,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def visit_Assign(self, node):
         targets = [self.get_target(target) for target in node.targets]
         value = self.get_node_value(node.value)
+        # if isinstance(node.value, ast.List):
+        #     value = '[]'
         self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
 
     def visit_Expr(self, node):
@@ -60,6 +63,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
         for stmt in node.body:
             self.visit(stmt)
         self.indentation -= 1
+        self.berry_code.append(f"{self.indent()}end")
 
         if node.orelse:
             if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
@@ -68,12 +72,48 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 for stmt in node.orelse[0].body:
                     self.visit(stmt)
                 self.indentation -= 1
+                self.berry_code.append(f"{self.indent()}end")
             else:
                 self.berry_code.append(f"{self.indent()}else")
                 self.indentation += 1
                 for stmt in node.orelse:
                     self.visit(stmt)
                 self.indentation -= 1
+                self.berry_code.append(f"{self.indent()}end")
+
+
+    def visit_For(self, node):
+        target = self.get_node_value(node.target)
+        iter = self.get_node_value(node.iter)
+
+        # Check if iter is a call to .keys() on a dictionary
+        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Attribute) and node.iter.func.attr == 'keys':
+            dict_name = self.get_node_value(node.iter.func.value)
+            self.berry_code.append(f"{self.indent()}for {target} : {dict_name}.keys()")
+        else:
+            raise ValueError(f"Unsupported for loop iterable: {ast.dump(node.iter)}")
+
+        self.indentation += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indentation -= 1
+        self.berry_code.append(f"{self.indent()}end")
+
+    def visit_While(self, node):
+        test = self.get_node_value(node.test)
+        self.berry_code.append(f"{self.indent()}while {test}")
+        self.indentation += 1
+        for stmt in node.body:
+            self.visit(stmt)
+        self.indentation -= 1
+        self.berry_code.append(f"{self.indent()}end")
+        if node.orelse:
+            self.berry_code.append(f"{self.indent()}else")
+            self.indentation += 1
+            for stmt in node.orelse:
+                self.visit(stmt)
+            self.indentation -= 1
+            self.berry_code.append(f"{self.indent()}end")
 
     def visit_Dict(self, node):
         items = [f"{self.get_node_value(k)}: {self.get_node_value(v)}" for k, v in zip(node.keys, node.values)]
@@ -164,10 +204,12 @@ class PythonToBerryConverter(ast.NodeVisitor):
             values = [self.get_node_value(v) for v in node.values]
             return f" {op} ".join(values)
         elif isinstance(node, ast.Compare):
-            left = self.get_node_value(node.left)
-            ops = [self.get_operator(op) for op in node.ops]
-            comparators = [self.get_node_value(comp) for comp in node.comparators]
-            return f"{left} {' '.join(ops)} {' '.join(comparators)}"
+                left = self.get_node_value(node.left)
+                ops = [self.get_operator(op) for op in node.ops]
+                comparators = [self.get_node_value(comp) for comp in node.comparators]
+                if isinstance(node.ops[0], ast.IsNot):
+                    return f"{left} != {' '.join(comparators)}"
+                return f"{left} {' '.join(ops)} {' '.join(comparators)}"
         elif isinstance(node, ast.IfExp):
             body = self.get_node_value(node.body)
             test = self.get_node_value(node.test)
@@ -237,7 +279,16 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return "or"
         elif isinstance(op, ast.Not):
             return "not"
-        return ""
+        elif isinstance(op, ast.BitOr):
+            return "|"
+        elif isinstance(op, ast.BitXor):
+            return "^"
+        elif isinstance(op, ast.BitAnd):
+            return "&"
+        elif isinstance(op, ast.FloorDiv):
+            return "//"
+        else:
+            return ""
 
     def convert(self, source_code):
         # Store the source code lines for error context
@@ -263,4 +314,3 @@ def convert_python_to_berry(input_file_path):
         file.write(berry_code)
 
     print(f"Converted code written to {output_file_path}")
-
