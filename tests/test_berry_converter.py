@@ -133,5 +133,16 @@ end"""
         print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
+    def test_multiline_string_print(self):
+        source_code = """
+print('Finished collecting data:\\n', self.json_response)
+"""
+        expected_output = """
+print('Finished collecting data:\\n', self.json_response)
+"""
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
+        self.assertEqual(berry_code.strip(), expected_output.strip())
+
 if __name__ == '__main__':
     unittest.main()

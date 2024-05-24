@@ -249,7 +249,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def get_node_value(self, node):
         if isinstance(node, ast.Constant):
             if isinstance(node.value, str):
-                return f"'{node.value}'"
+                value = node.value.replace('\n', '\\n')
+                return f"'{value}'"
             return str(node.value)
         elif isinstance(node, ast.Name):
             return node.id
