@@ -4,6 +4,7 @@ from berry_converter import PythonToBerryConverter
 class TestPythonToBerryConverter(unittest.TestCase):
     def setUp(self):
         self.converter = PythonToBerryConverter()
+        self.maxDiff = None
 
     def test_class_and_function_conversion(self):
         source_code = """
@@ -64,7 +65,8 @@ self.i += 1
         source_code = """
 self.web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', self.sequencer.size() + 2)
 """
-        expected_output = """self.web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', self.sequencer.size() + 2)"""
+        expected_output = """
+self.web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', self.sequencer.size() + 2)"""
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
@@ -140,6 +142,38 @@ print('Finished collecting data:\\n', self.json_response)
         expected_output = """
 print('Finished collecting data:\\n', self.json_response)
 """
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
+        self.assertEqual(berry_code.strip(), expected_output.strip())
+
+    def test_function_callback_conversion(self):
+        source_code = """
+class TestClass:
+    def __init__(self, interval, timer):
+        self.interval = interval
+        self.timer = timer
+
+    def start_over(self):
+        print("Starting over")
+
+    def set_timers(self):
+        tasmota.set_timer(self.interval * 1000, self.start_over, self.timer)
+        tasmota.set_timer(self.interval, self.start_over, self.timer)
+"""
+        expected_output = """
+class TestClass
+    def init(interval, timer)
+        self.interval = interval
+        self.timer = timer
+    end
+    def start_over()
+        print('Starting over')
+    end
+    def set_timers()
+        tasmota.set_timer(self.interval * 1000, /-> self.start_over(), self.timer)
+        tasmota.set_timer(self.interval, /-> self.start_over(), self.timer)
+    end
+end"""
         berry_code = self.converter.convert(source_code)
         print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())

@@ -5,6 +5,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.berry_code = []
         self.indentation = 0
         self.source_lines = []
+        self.function_defs = set()  # Track function definitions
         self.name_changes = {
             'json.loads': 'json.load',
             'float': 'real',
@@ -35,9 +36,15 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.berry_code[-1] += ', '.join(args) + ")"
 
         self.indentation += 1
+        self.function_defs.add(node.name)  # Add function name to set
         self.generic_visit(node)
         self.indentation -= 1
         self.berry_code.append(f"{self.indent()}end")
+
+    def visit_Lambda(self, node):
+        args = [arg.arg for arg in node.args.args]
+        body = self.get_node_value(node.body)
+        return f"/->{body}"
 
     def visit_Try(self, node):
         self.berry_code.append(f"{self.indent()}try")
@@ -82,16 +89,38 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def visit_Call(self, node):
         func_name = self.get_func_name(node.func)
         args = [self.get_node_value(arg) for arg in node.args]
-        self.berry_code.append(f"{self.indent()}{func_name}({', '.join(args)})")
+
+        # Generalize handling for function callbacks
+        for i, arg in enumerate(args):
+            if isinstance(node.args[i], ast.Name) and self.is_function_reference(node.args[i]):
+                # Treat as a function reference
+                args[i] = f"/-> {arg}()"
+            elif isinstance(node.args[i], ast.Attribute) and self.is_function_reference(node.args[i]):
+                # Treat as a method reference
+                args[i] = f"/-> {arg}()"
+            elif isinstance(node.args[i], ast.Lambda):
+                args[i] = f"/-> {arg}"
+
+        debug_info = f"{func_name}({', '.join(args)})"
+        print(f"DEBUG: Visiting call: {debug_info}")
+        self.berry_code.append(f"{self.indent()}{debug_info}")
+
+    def is_function_reference(self, node):
+        if isinstance(node, ast.Name):
+            return node.id in self.function_defs
+        if isinstance(node, ast.Attribute):
+            return node.attr in self.function_defs
+        return False
 
     def visit_If(self, node):
         if isinstance(node.test, ast.Compare) and isinstance(node.test.ops[0], ast.In):
             # Convert `in` to .contains() method call
             left = self.get_node_value(node.test.left)
             comparators = node.test.comparators[0]
-            if isinstance(comparators, ast.Str):
-                test = f"({self.get_node_value(comparators)}.contains({left}))"
-            else:
+            if isinstance(comparators, ast.List):
+                comparators = [self.get_node_value(comp) for comp in comparators.elts]
+                test = ' || '.join([f'{left} == {comp}' for comp in comparators])
+            elif isinstance(comparators, (ast.Str, ast.Name)):
                 test = f"({self.get_node_value(comparators)}.contains({left}))"
         else:
             test = self.get_node_value(node.test)
@@ -247,7 +276,11 @@ class PythonToBerryConverter(ast.NodeVisitor):
         return ""
 
     def get_node_value(self, node):
-        if isinstance(node, ast.Constant):
+        if isinstance(node, ast.Lambda):
+            return self.visit_Lambda(node)
+        elif isinstance(node, ast.FunctionDef):
+            return f"/->{node.name}()"
+        elif isinstance(node, ast.Constant):
             if isinstance(node.value, str):
                 value = node.value.replace('\n', '\\n')
                 return f"'{value}'"
@@ -274,19 +307,10 @@ class PythonToBerryConverter(ast.NodeVisitor):
             values = [self.get_node_value(v) for v in node.values]
             return f"({op.join(values)})"
         elif isinstance(node, ast.Compare):
-            left = self.get_node_value(node.left)
-            ops = [self.get_operator(op) for op in node.ops]
-            comparators = [self.get_node_value(comp) for comp in node.comparators]
             if isinstance(node.ops[0], ast.IsNot):
-                return f"{left} != {' '.join(comparators)}"
-            if isinstance(node.ops[0], ast.In):
-                comparator = node.comparators[0]
-                if isinstance(comparator, ast.List):
-                    comparators = [self.get_node_value(comp) for comp in comparator.elts]
-                    return f"({left} == {' || '.join(comparators)})"
-                elif isinstance(comparator, (ast.Name, ast.Attribute)):
-                    return f"{self.get_node_value(comparator)}.contains({left})"
-            return f"{left} {' '.join(ops)} {' '.join(comparators)}"
+                left = self.get_node_value(node.left)
+                right = self.get_node_value(node.comparators[0])
+                return f"{left} != {right}"
         elif isinstance(node, ast.IfExp):
             body = self.get_node_value(node.body)
             test = self.get_node_value(node.test)
@@ -320,7 +344,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
             format_string = ''.join(format_string_parts)
             return f"string.format('{format_string}', {', '.join(format_values)})"
         return ""
-
 
     def get_operator(self, op):
         if isinstance(op, ast.Add):
