@@ -13,15 +13,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def set_source_code(self, source_code):
         self.source_lines = source_code.splitlines()
 
-    def get_source_segment(self, node):
-        if self.source_lines:
-            start_line = node.lineno - 1
-            end_line = node.end_lineno
-            if end_line:
-                end_line -= 1
-            return "\n".join(self.source_lines[start_line:end_line+1])
-        return ""
-
     def indent(self):
         return '    ' * self.indentation
 
@@ -46,6 +37,11 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.generic_visit(node)
         self.indentation -= 1
         self.berry_code.append(f"{self.indent()}end")
+
+    def visit_Assign(self, node):
+        targets = [self.get_target(target) for target in node.targets]
+        value = self.get_node_value(node.value)
+        self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
 
     def visit_Expr(self, node):
         if isinstance(node.value, ast.Call):
@@ -123,7 +119,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return self.get_node_value(node)
         else:
             raise ValueError(f"Unsupported subscript type: {type(node)}")
-
 
     def visit_Attribute(self, node):
         self.berry_code.append(f"{self.get_func_name(node)}")
@@ -207,11 +202,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return f"string.format('{format_string}', {', '.join(format_values)})"
         return ""
 
-    def visit_Assign(self, node):
-        targets = [self.get_target(target) for target in node.targets]
-        value = self.get_node_value(node.value)
-        self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
-
     def get_operator(self, op):
         if isinstance(op, ast.Add):
             return "+"
@@ -229,22 +219,10 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return "<<"
         elif isinstance(op, ast.RShift):
             return ">>"
-        elif isinstance(op, ast.BitOr):
-            return "|"
-        elif isinstance(op, ast.BitXor):
-            return "^"
-        elif isinstance(op, ast.BitAnd):
-            return "&"
-        elif isinstance(op, ast.FloorDiv):
-            return "//"
-        elif isinstance(op, ast.And):
-            return "&&"
-        elif isinstance(op, ast.Or):
-            return "||"
-        elif isinstance(op, ast.Eq):
-            return "=="
         elif isinstance(op, ast.NotEq):
             return "!="
+        elif isinstance(op, ast.Eq):
+            return "=="
         elif isinstance(op, ast.Lt):
             return "<"
         elif isinstance(op, ast.LtE):
@@ -253,14 +231,12 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return ">"
         elif isinstance(op, ast.GtE):
             return ">="
-        elif isinstance(op, ast.Is):
-            return "is"
-        elif isinstance(op, ast.IsNot):
-            return "is not"
-        elif isinstance(op, ast.In):
-            return "in"
-        elif isinstance(op, ast.NotIn):
-            return "not in"
+        elif isinstance(op, ast.And):
+            return "and"
+        elif isinstance(op, ast.Or):
+            return "or"
+        elif isinstance(op, ast.Not):
+            return "not"
         return ""
 
     def convert(self, source_code):
@@ -275,15 +251,16 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.visit(tree)
         return '\n'.join(self.berry_code)
 
-def convert_python_to_berry(file_path):
-    with open(file_path, 'r') as file:
+def convert_python_to_berry(input_file_path):
+    with open(input_file_path, 'r') as file:
         source_code = file.read()
 
     converter = PythonToBerryConverter()
     berry_code = converter.convert(source_code)
 
-    output_file_path = file_path.replace('.py', '.be')
+    output_file_path = input_file_path.replace('.py', '.be')
     with open(output_file_path, 'w') as file:
         file.write(berry_code)
 
     print(f"Converted code written to {output_file_path}")
+
