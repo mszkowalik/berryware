@@ -1,29 +1,18 @@
 import threading
 
-class Tasmota:
+class TasmotaAdapter:
     def cmd(self, command):
-        print(f"Tasmota Command: {command}")
+        print(f"Executing Tasmota command: {command}")
+        # Simulate different command responses
+        if command == "status5":
+            return {"Status": {"Topic": "dummy_topic"}}
+        # Add more command simulations as needed
+        return {}
 
-    def set_timer(self, timeout, callback, timer_name):
-        print(f"Timer {timer_name} set for {timeout} ms")
-        threading.Timer(timeout / 1000, callback).start()
+    def set_timer(self, delay, callback, timer_name=None):
+        def timer_callback():
+            threading.Timer(delay / 1000, callback).start()
 
-    def remove_timer(self, timer_name):
-        print(f"Timer {timer_name} removed")
+        timer_callback()
 
-    def time_str(self, rtc):
-        return "2024-05-24T12:34:56"
-
-    def rtc(self):
-        return {"local": "local_time"}
-
-    def web_send(self, message):
-        print(f"Web Message: {message}")
-
-    def add_rule(self, event, action, rule_id):
-        print(f"Added rule {rule_id} for event {event}")
-
-    def add_driver(self, driver):
-        print(f"Added driver {driver}")
-
-tasmota = Tasmota()
+tasmota = TasmotaAdapter()
