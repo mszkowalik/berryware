@@ -58,12 +58,22 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.berry_code.append(f"{self.indent()}{func_name}({', '.join(args)})")
 
     def visit_If(self, node):
-        self.berry_code.append(f"{self.indent()}if {self.get_node_value(node.test)}")
+        if isinstance(node.test, ast.Compare) and isinstance(node.test.ops[0], ast.In):
+            # Convert `in` to .contains() method call
+            left = self.get_node_value(node.test.left)
+            comparators = node.test.comparators[0]
+            if isinstance(comparators, ast.Str):
+                test = f"({self.get_node_value(comparators)}.contains({left}))"
+            else:
+                test = f"({self.get_node_value(comparators)}.contains({left}))"
+        else:
+            test = self.get_node_value(node.test)
+
+        self.berry_code.append(f"{self.indent()}if {test}")
         self.indentation += 1
         for stmt in node.body:
             self.visit(stmt)
         self.indentation -= 1
-        self.berry_code.append(f"{self.indent()}end")
 
         if node.orelse:
             if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
@@ -72,15 +82,14 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 for stmt in node.orelse[0].body:
                     self.visit(stmt)
                 self.indentation -= 1
-                self.berry_code.append(f"{self.indent()}end")
             else:
                 self.berry_code.append(f"{self.indent()}else")
                 self.indentation += 1
                 for stmt in node.orelse:
                     self.visit(stmt)
                 self.indentation -= 1
-                self.berry_code.append(f"{self.indent()}end")
 
+        self.berry_code.append(f"{self.indent()}end")
 
     def visit_For(self, node):
         target = self.get_node_value(node.target)
@@ -204,12 +213,19 @@ class PythonToBerryConverter(ast.NodeVisitor):
             values = [self.get_node_value(v) for v in node.values]
             return f" {op} ".join(values)
         elif isinstance(node, ast.Compare):
-                left = self.get_node_value(node.left)
-                ops = [self.get_operator(op) for op in node.ops]
-                comparators = [self.get_node_value(comp) for comp in node.comparators]
-                if isinstance(node.ops[0], ast.IsNot):
-                    return f"{left} != {' '.join(comparators)}"
-                return f"{left} {' '.join(ops)} {' '.join(comparators)}"
+            left = self.get_node_value(node.left)
+            ops = [self.get_operator(op) for op in node.ops]
+            comparators = [self.get_node_value(comp) for comp in node.comparators]
+            if isinstance(node.ops[0], ast.IsNot):
+                return f"{left} != {' '.join(comparators)}"
+            if isinstance(node.ops[0], ast.In):
+                comparator = node.comparators[0]
+                if isinstance(comparator, ast.List):
+                    comparators = [self.get_node_value(comp) for comp in comparator.elts]
+                    return ' || '.join([f'{left} == {comp}' for comp in comparators])
+                else:
+                    return f"{self.get_node_value(comparator)}.contains({left})"
+            return f"{left} {' '.join(ops)} {' '.join(comparators)}"
         elif isinstance(node, ast.IfExp):
             body = self.get_node_value(node.body)
             test = self.get_node_value(node.test)
@@ -243,6 +259,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             format_string = ''.join(format_string_parts)
             return f"string.format('{format_string}', {', '.join(format_values)})"
         return ""
+
 
     def get_operator(self, op):
         if isinstance(op, ast.Add):
