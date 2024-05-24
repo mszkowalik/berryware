@@ -59,13 +59,14 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
     def visit_If(self, node):
         if isinstance(node.test, ast.Compare) and isinstance(node.test.ops[0], ast.In):
-            # Convert `in` to .contains() method call
+            # Convert `in` to .contains() method call for strings or handle lists
             left = self.get_node_value(node.test.left)
-            comparators = node.test.comparators[0]
-            if isinstance(comparators, ast.Str):
-                test = f"({self.get_node_value(comparators)}.contains({left}))"
+            comparator = node.test.comparators[0]
+            if isinstance(comparator, ast.List):
+                comparators = [self.get_node_value(comp) for comp in comparator.elts]
+                test = ' || '.join([f'{left} == {comp}' for comp in comparators])
             else:
-                test = f"({self.get_node_value(comparators)}.contains({left}))"
+                test = f"({self.get_node_value(comparator)}.contains({left}))"
         else:
             test = self.get_node_value(node.test)
 
@@ -124,6 +125,13 @@ class PythonToBerryConverter(ast.NodeVisitor):
             self.indentation -= 1
             self.berry_code.append(f"{self.indent()}end")
 
+    def visit_Return(self, node):
+        if node.value:
+            return_value = self.get_node_value(node.value)
+            self.berry_code.append(f"{self.indent()}return {return_value}")
+        else:
+            self.berry_code.append(f"{self.indent()}return")
+
     def visit_Dict(self, node):
         items = [f"{self.get_node_value(k)}: {self.get_node_value(v)}" for k, v in zip(node.keys, node.values)]
         return "{" + ", ".join(items) + "}"
@@ -168,6 +176,12 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return self.get_node_value(node)
         else:
             raise ValueError(f"Unsupported subscript type: {type(node)}")
+
+    def visit_AugAssign(self, node):
+        target = self.get_node_value(node.target)
+        op = self.get_operator(node.op)
+        value = self.get_node_value(node.value)
+        self.berry_code.append(f"{self.indent()}{target} {op}= {value}")
 
     def visit_Attribute(self, node):
         self.berry_code.append(f"{self.get_func_name(node)}")
@@ -290,6 +304,15 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return ">"
         elif isinstance(op, ast.GtE):
             return ">="
+        elif isinstance(op, ast.AugAssign):  # Add support for augmented assignment
+            if isinstance(op.op, ast.Add):
+                return "+="
+            elif isinstance(op.op, ast.Sub):
+                return "-="
+            elif isinstance(op.op, ast.Mult):
+                return "*="
+            elif isinstance(op.op, ast.Div):
+                return "/="
         elif isinstance(op, ast.And):
             return "and"
         elif isinstance(op, ast.Or):
