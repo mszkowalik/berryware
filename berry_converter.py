@@ -4,6 +4,19 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def __init__(self):
         self.berry_code = []
         self.indentation = 0
+        self.source_lines = []
+
+    def set_source_code(self, source_code):
+        self.source_lines = source_code.splitlines()
+
+    def get_source_segment(self, node):
+        if self.source_lines:
+            start_line = node.lineno - 1
+            end_line = node.end_lineno
+            if end_line:
+                end_line -= 1
+            return "\n".join(self.source_lines[start_line:end_line+1])
+        return ""
 
     def indent(self):
         return '    ' * self.indentation
@@ -86,7 +99,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elif isinstance(node, ast.Subscript):
             return f"{self.get_target(node.value)}[{self.get_subscript(node.slice)}]"
         elif isinstance(node, ast.Call):
-            return self.visit_Call(node)
+            return self.get_node_value(node)
         else:
             raise ValueError(f"Unsupported target type: {type(node)}")
 
@@ -98,12 +111,19 @@ class PythonToBerryConverter(ast.NodeVisitor):
             upper = self.get_node_value(node.upper) if node.upper else ''
             step = self.get_node_value(node.step) if node.step else ''
             return f"{lower}:{upper}:{step}"
+        elif isinstance(node, ast.Subscript):
+            return self.get_target(node)
         elif isinstance(node, ast.Constant):
             return self.get_node_value(node)
         elif isinstance(node, ast.Name):
             return node.id
+        elif isinstance(node, ast.BinOp):
+            return self.get_node_value(node)
+        elif isinstance(node, ast.UnaryOp):
+            return self.get_node_value(node)
         else:
             raise ValueError(f"Unsupported subscript type: {type(node)}")
+
 
     def visit_Attribute(self, node):
         self.berry_code.append(f"{self.get_func_name(node)}")
@@ -140,6 +160,10 @@ class PythonToBerryConverter(ast.NodeVisitor):
             right = self.get_node_value(node.right)
             op = self.get_operator(node.op)
             return f"{left} {op} {right}"
+        elif isinstance(node, ast.UnaryOp):
+            op = self.get_operator(node.op)
+            operand = self.get_node_value(node.operand)
+            return f"{op}{operand}"
         elif isinstance(node, ast.BoolOp):
             op = 'and' if isinstance(node.op, ast.And) else 'or'
             values = [self.get_node_value(v) for v in node.values]
@@ -162,6 +186,9 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return self.visit_Tuple(node)
         elif isinstance(node, ast.Call):
             return f"{self.get_func_name(node.func)}({', '.join([self.get_node_value(arg) for arg in node.args])})"
+        elif isinstance(node, ast.JoinedStr):
+            source_segment = self.get_source_segment(node)
+            raise ValueError(f"f-strings are not supported in Berry. Offending code:\n{source_segment}")
         return ""
 
     def get_operator(self, op):
@@ -216,6 +243,12 @@ class PythonToBerryConverter(ast.NodeVisitor):
         return ""
 
     def convert(self, source_code):
+        # Store the source code lines for error context
+        self.set_source_code(source_code)
+
+        # Replace json.loads with json.load before parsing
+        source_code = source_code.replace('json.loads', 'json.load')
+
         tree = ast.parse(source_code)
         self.visit(tree)
         return '\n'.join(self.berry_code)
@@ -227,7 +260,7 @@ def convert_python_to_berry(file_path):
     converter = PythonToBerryConverter()
     berry_code = converter.convert(source_code)
 
-    output_file_path = file_path.replace('.py', '.berry')
+    output_file_path = file_path.replace('.py', '.be')
     with open(output_file_path, 'w') as file:
         file.write(berry_code)
 
