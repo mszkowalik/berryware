@@ -85,6 +85,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return f"{self.get_target(node.value)}.{node.attr}"
         elif isinstance(node, ast.Subscript):
             return f"{self.get_target(node.value)}[{self.get_subscript(node.slice)}]"
+        elif isinstance(node, ast.Call):
+            return self.visit_Call(node)
         else:
             raise ValueError(f"Unsupported target type: {type(node)}")
 
@@ -225,7 +227,7 @@ def convert_python_to_berry(file_path):
     converter = PythonToBerryConverter()
     berry_code = converter.convert(source_code)
 
-    output_file_path = file_path.replace('.py', '.be')
+    output_file_path = file_path.replace('.py', '.berry')
     with open(output_file_path, 'w') as file:
         file.write(berry_code)
 
