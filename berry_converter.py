@@ -59,14 +59,13 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
     def visit_If(self, node):
         if isinstance(node.test, ast.Compare) and isinstance(node.test.ops[0], ast.In):
-            # Convert `in` to .contains() method call for strings or handle lists
+            # Convert `in` to .contains() method call
             left = self.get_node_value(node.test.left)
-            comparator = node.test.comparators[0]
-            if isinstance(comparator, ast.List):
-                comparators = [self.get_node_value(comp) for comp in comparator.elts]
-                test = ' || '.join([f'{left} == {comp}' for comp in comparators])
+            comparators = node.test.comparators[0]
+            if isinstance(comparators, ast.Str):
+                test = f"({self.get_node_value(comparators)}.contains({left}))"
             else:
-                test = f"({self.get_node_value(comparator)}.contains({left}))"
+                test = f"({self.get_node_value(comparators)}.contains({left}))"
         else:
             test = self.get_node_value(node.test)
 
@@ -83,6 +82,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 for stmt in node.orelse[0].body:
                     self.visit(stmt)
                 self.indentation -= 1
+                # Handle nested elif
+                self.handle_elif(node.orelse[0])
             else:
                 self.berry_code.append(f"{self.indent()}else")
                 self.indentation += 1
@@ -91,6 +92,22 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 self.indentation -= 1
 
         self.berry_code.append(f"{self.indent()}end")
+
+    def handle_elif(self, node):
+        if node.orelse:
+            if len(node.orelse) == 1 and isinstance(node.orelse[0], ast.If):
+                self.berry_code.append(f"{self.indent()}elif {self.get_node_value(node.orelse[0].test)}")
+                self.indentation += 1
+                for stmt in node.orelse[0].body:
+                    self.visit(stmt)
+                self.indentation -= 1
+                self.handle_elif(node.orelse[0])
+            else:
+                self.berry_code.append(f"{self.indent()}else")
+                self.indentation += 1
+                for stmt in node.orelse:
+                    self.visit(stmt)
+                self.indentation -= 1
 
     def visit_For(self, node):
         target = self.get_node_value(node.target)
@@ -217,7 +234,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             left = self.get_node_value(node.left)
             right = self.get_node_value(node.right)
             op = self.get_operator(node.op)
-            return f"({left} {op} {right})"
+            return f"{left} {op} {right}"
         elif isinstance(node, ast.UnaryOp):
             op = self.get_operator(node.op)
             operand = self.get_node_value(node.operand)
@@ -233,22 +250,20 @@ class PythonToBerryConverter(ast.NodeVisitor):
             ops = [self.get_operator(op) for op in node.ops]
             comparators = [self.get_node_value(comp) for comp in node.comparators]
             if isinstance(node.ops[0], ast.IsNot):
-                return f"({left} != {' '.join(comparators)})"
+                return f"{left} != {' '.join(comparators)}"
             if isinstance(node.ops[0], ast.In):
                 comparator = node.comparators[0]
                 if isinstance(comparator, ast.List):
                     comparators = [self.get_node_value(comp) for comp in comparator.elts]
-                    return f"({' || '.join([f'{left} == {comp}' for comp in comparators])})"
+                    return f"{left} in {' || '.join(comparators)}"
                 elif isinstance(comparator, (ast.Name, ast.Attribute)):
-                    return f"({self.get_node_value(comparator)}.contains({left}))"
-                else:
-                    return f"({left} in {self.get_node_value(comparator)})"
-            return f"({left} {' '.join(ops)} {' '.join(comparators)})"
+                    return f"{self.get_node_value(comparator)}.contains({left})"
+            return f"{left} {' '.join(ops)} {' '.join(comparators)}"
         elif isinstance(node, ast.IfExp):
             body = self.get_node_value(node.body)
             test = self.get_node_value(node.test)
             orelse = self.get_node_value(node.orelse)
-            return f"({body} if {test} else {orelse})"
+            return f"{body} if {test} else {orelse}"
         elif isinstance(node, ast.Dict):
             return self.visit_Dict(node)
         elif isinstance(node, ast.List):
