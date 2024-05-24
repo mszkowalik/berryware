@@ -255,7 +255,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 comparator = node.comparators[0]
                 if isinstance(comparator, ast.List):
                     comparators = [self.get_node_value(comp) for comp in comparator.elts]
-                    return f"{left} in {' || '.join(comparators)}"
+                    return f"({left} == {' || '.join(comparators)})"
                 elif isinstance(comparator, (ast.Name, ast.Attribute)):
                     return f"{self.get_node_value(comparator)}.contains({left})"
             return f"{left} {' '.join(ops)} {' '.join(comparators)}"
@@ -286,9 +286,9 @@ class PythonToBerryConverter(ast.NodeVisitor):
             for value in node.values:
                 if isinstance(value, ast.Str):
                     format_string_parts.append(value.s)
-                else:
+                elif isinstance(value, ast.FormattedValue):
                     format_string_parts.append('%s')
-                    format_values.append(self.get_node_value(value))
+                    format_values.append(self.get_node_value(value.value))
             format_string = ''.join(format_string_parts)
             return f"string.format('{format_string}', {', '.join(format_values)})"
         return ""
