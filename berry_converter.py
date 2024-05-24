@@ -5,6 +5,10 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.berry_code = []
         self.indentation = 0
         self.source_lines = []
+        self.name_changes = {
+            'json.loads': 'json.load',
+            'float': 'real'
+        }
 
     def set_source_code(self, source_code):
         self.source_lines = source_code.splitlines()
@@ -33,19 +37,15 @@ class PythonToBerryConverter(ast.NodeVisitor):
             self.berry_code.append(f"{self.indent()}def init(")
         else:
             self.berry_code.append(f"{self.indent()}def {node.name}(")
-        
+
         # Add function arguments
         args = [arg.arg for arg in node.args.args if arg.arg != 'self']
         self.berry_code[-1] += ', '.join(args) + ")"
-        
+
         self.indentation += 1
         self.generic_visit(node)
         self.indentation -= 1
         self.berry_code.append(f"{self.indent()}end")
-
-    def visit_Assign(self, node):
-        targets = [self.get_target(target) for target in node.targets]
-        self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {self.get_node_value(node.value)}")
 
     def visit_Expr(self, node):
         if isinstance(node.value, ast.Call):
@@ -185,11 +185,32 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elif isinstance(node, ast.Tuple):
             return self.visit_Tuple(node)
         elif isinstance(node, ast.Call):
-            return f"{self.get_func_name(node.func)}({', '.join([self.get_node_value(arg) for arg in node.args])})"
+            func_name = self.get_func_name(node.func)
+            args = [self.get_node_value(arg) for arg in node.args]
+            if func_name == "str.format":
+                # Handle string formatting
+                format_string = args[0]
+                format_args = ", ".join(args[1:])
+                return f"string.format({format_string}, {format_args})"
+            return f"{func_name}({', '.join(args)})"
         elif isinstance(node, ast.JoinedStr):
-            source_segment = self.get_source_segment(node)
-            raise ValueError(f"f-strings are not supported in Berry. Offending code:\n{source_segment}")
+            # Convert f-string to string.format
+            format_string_parts = []
+            format_values = []
+            for value in node.values:
+                if isinstance(value, ast.Str):
+                    format_string_parts.append(value.s)
+                else:
+                    format_string_parts.append('%s')
+                    format_values.append(self.get_node_value(value))
+            format_string = ''.join(format_string_parts)
+            return f"string.format('{format_string}', {', '.join(format_values)})"
         return ""
+
+    def visit_Assign(self, node):
+        targets = [self.get_target(target) for target in node.targets]
+        value = self.get_node_value(node.value)
+        self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
 
     def get_operator(self, op):
         if isinstance(op, ast.Add):
@@ -246,8 +267,9 @@ class PythonToBerryConverter(ast.NodeVisitor):
         # Store the source code lines for error context
         self.set_source_code(source_code)
 
-        # Replace json.loads with json.load before parsing
-        source_code = source_code.replace('json.loads', 'json.load')
+        # Apply name changes
+        for old_name, new_name in self.name_changes.items():
+            source_code = source_code.replace(old_name, new_name)
 
         tree = ast.parse(source_code)
         self.visit(tree)
