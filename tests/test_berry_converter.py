@@ -83,9 +83,9 @@ var web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" 
 
     def test_f_string_conversion(self):
         source_code = """
-self.mqtt_topic_config = f"tele/{self.EUI}/{mqtt_topic_config}"
+mqtt_topic_config = f"tele/{self.EUI}/{mqtt_topic_config}"
 """
-        expected_output = """self.mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
+        expected_output = """var mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
 

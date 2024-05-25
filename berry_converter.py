@@ -131,15 +131,23 @@ class PythonToBerryConverter(ast.NodeVisitor):
         for target in targets:
             if self.inside_method:
                 if target.startswith('self.'):
+                    # Instance variable assignment
                     self.berry_code.append(f"{self.indent()}{target} = {value}")
                 else:
+                    # Local variable assignment within a method
                     if target not in self.local_variables:
                         self.berry_code.append(f"{self.indent()}var {target} = {value}")
                         self.local_variables.add(target)
                     else:
                         self.berry_code.append(f"{self.indent()}{target} = {value}")
             else:
-                self.berry_code.append(f"{self.indent()}var {target} = {value}")
+                # Global or class-level variable assignment
+                if target not in self.local_variables:
+                    self.berry_code.append(f"{self.indent()}var {target} = {value}")
+                    self.local_variables.add(target)
+                else:
+                    self.berry_code.append(f"{self.indent()}{target} = {value}")
+
 
     def visit_Name(self, node):
         self.berry_code.append(node.id)
