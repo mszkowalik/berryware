@@ -1,58 +1,50 @@
-from mqtt_adapter import mqtt
-from tasmota_adapter import tasmota
+import json
+import time
+from typing import List, Dict, Any
+from adapters.mqtt_adapter import mqtt
+from adapters.tasmota_adapter import tasmota
+from adapters.persist import persist
 
-class iterator:
-    def __init__(self, mqtt_topic_modbussend, mqtt_topic_monitoring, mqtt_topic_config, mqtt_topic_interval, device_address, interval, inverter, inverter_sn):
-        self.EUI = "tasmota_cmd_status5"
-        self.prefix = "tele/"
-        self.address_map = {"modbussend": "modbussend"}
-        self.device_address = device_address
-        self.interval = interval
-        self.inverter = inverter
-        self.inverter_sn = inverter_sn
-        self.json_response = {}
-        self.mqtt_topic_monitoring = mqtt_topic_monitoring
-        self.mqtt_topic_config = mqtt_topic_config
-        self.mqtt_topic_interval = mqtt_topic_interval
-        self.mqtt_topic_modbussend = mqtt_topic_modbussend
+# Predefined JSON dictionary of available registers
+registers_json = {
+    "SOLIS_4G": {
+        "registers": [
+            {"address": 3005, "name": "PV-Pf-value", "functioncode": 4, "type": "uint16", "count": 2, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3009, "name": "PV-Mr-d", "functioncode": 4, "type": "uint16", "count": 2, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3015, "name": "PV-Rd-value", "functioncode": 4, "type": "uint16", "count": 1, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3034, "name": "PV-V-A", "functioncode": 4, "type": "uint16", "count": 1, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3037, "name": "PV-A-A", "functioncode": 4, "type": "uint16", "count": 1, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3283, "name": "GR-Mr-c", "functioncode": 4, "type": "uint16", "count": 2, "scale": 1.0, "byteorder": "ABCD"},
+            {"address": 3285, "name": "GR-Mr-d", "functioncode": 4, "type": "uint16", "count": 2, "scale": 1.0, "byteorder": "ABCD"}
+        ],
+        "requests": [
+            {"deviceaddress": 1, "functioncode": 4, "startaddress": 3005, "type": "uint16", "count": 40, "interval": 60},
+            {"deviceaddress": 1, "functioncode": 4, "startaddress": 3280, "type": "uint16", "count": 20, "interval": 60}
+        ]
+    }
+}
 
-    def mqtt_set(self):
-        mqtt.subscribe(self.mqtt_topic_monitoring, self.mqtt_data)
-        mqtt.subscribe(self.mqtt_topic_config, self.mqtt_data)
-        mqtt.subscribe(self.mqtt_topic_interval, self.mqtt_data)
-        mqtt.subscribe(self.mqtt_topic_modbussend, self.mqtt_data)
+# Configuration JSON for devices
+config_json = {
+    "devices": [
+        {"name": "Inverter 1", "type": "SOLIS_4G", "address": 1}
+    ]
+}
 
-    def mqtt_unset(self):
-        mqtt.unsubscribe(self.mqtt_topic_monitoring)
-        mqtt.unsubscribe(self.mqtt_topic_config)
-        mqtt.unsubscribe(self.mqtt_topic_interval)
-        mqtt.unsubscribe(self.mqtt_topic_modbussend)
+# Driver class that generates Modbus requests
+class MyDriver:
+    def __init__(self, devices: List[Dict[str, Any]], registers: Dict[str, Any]):
+        self.devices = devices
+        self.registers = registers
 
-    def mqtt_data(self, topic, message):
-        if topic == self.mqtt_topic_monitoring:
-            msg = message
-            if msg == '1':
-                self.start_over()
-            elif msg == '0':
-                self.stop()
-        elif topic == self.mqtt_topic_config:
-            pass  # Other logic
+    def every_second(self):
+        print("Running every second task...")
 
-    def start_over(self):
-        print("Monitoring awaking")
-        self.clear_response()
+    def every_250ms(self):
+        print("Generating Modbus requests...")
+        for device in self.devices:
+            device_type = device["type"]
+            if device_type in self.registers:
+                for request in self.registers[device_type]["requests"]:
+                    print(f"Generating Modbus request for device {device['name']} at address {request['startaddress']}")
 
-    def stop(self):
-        print("Monitoring stop")
-        self.collect_data = False
-
-    def clear_response(self):
-        for key in self.json_response.keys():
-            self.json_response[key] = '-'
-
-def main():
-    iterator_instance = iterator("modbussend", "monitoring", "config", "interval", 1, 10, "SOLIS", "1234567890")
-    iterator_instance.mqtt_set()
-
-if __name__ == "__main__":
-    main()

@@ -6,8 +6,8 @@ current_directory = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_directory)
 
 # Import mock modules
-import mqtt_adapter as mqtt
-import tasmota_adapter as tasmota
+import adapters.mqtt_adapter as mqtt
+import adapters.tasmota_adapter as tasmota
 
 # Import autoexec module
 import autoexec

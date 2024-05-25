@@ -1,6 +1,6 @@
 import threading
-from mqtt_adapter import MQTTAdapter
-from singleton import singleton
+from adapters.mqtt_adapter import MQTTAdapter
+from adapters.singleton import singleton
 import json
 
 @singleton

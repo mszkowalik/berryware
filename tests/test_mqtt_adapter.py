@@ -1,5 +1,5 @@
 import unittest
-from mqtt_adapter import MQTTAdapter
+from adapters.mqtt_adapter import MQTTAdapter
 
 class TestMQTTAdapter(unittest.TestCase):
     def setUp(self):

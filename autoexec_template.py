@@ -1,5 +1,5 @@
-from mqtt_adapter import mqtt
-import tasmota_adapter as tasmota
+from adapters.mqtt_adapter import mqtt
+import adapters.tasmota_adapter as tasmota
 
 class iterator:
     def __init__(self, mqtt_topic_modbussend, mqtt_topic_monitoring, mqtt_topic_config, mqtt_topic_interval, device_address, interval, inverter, inverter_sn):

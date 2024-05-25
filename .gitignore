@@ -2,3 +2,4 @@ __pycache__*
 berry/*
 autoexec.py
 autoexec.be
+_persist.json

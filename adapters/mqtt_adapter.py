@@ -1,4 +1,4 @@
-from singleton import singleton
+from adapters.singleton import singleton
 
 @singleton
 class MQTTAdapter:

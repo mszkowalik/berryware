@@ -1,0 +1,19 @@
+{
+    "SOLIS_4G":{
+        "registers":[
+            { "address": 3005, "name":"PV-Pf-value", "functioncode": 4, "type":"uint16", "count":2, "scale": 1.0, "byteorder": "ABCD"},
+            { "address": 3009, "name":"PV-Mr-d",     "functioncode": 4, "type":"uint16", "count":2, "scale": 1.0, "byteorder": "ABCD"},
+            { "address": 3015, "name":"PV-Rd-value", "functioncode": 4, "type":"uint16", "count":1, "scale": 1.0, "byteorder": "ABCD"},
+            { "address": 3034, "name":"PV-V-A",      "functioncode": 4, "type":"uint16", "count":1, "scale": 1.0, "byteorder": "ABCD"},
+            { "address": 3037, "name":"PV-A-A",      "functioncode": 4, "type":"uint16", "count":1, "scale": 1.0, "byteorder": "ABCD"},
+
+            { "address": 3283, "name":"GR-Mr-c",     "functioncode": 4, "type":"uint16", "count":2, "scale": 1.0, "byteorder": "ABCD"},
+            { "address": 3285, "name":"GR-Mr-d",     "functioncode": 4, "type":"uint16", "count":2, "scale": 1.0, "byteorder": "ABCD"}
+        ],
+        "requests":
+        [
+            {"deviceaddress": 1, "functioncode": 4, "startaddress": 3005, "type":"uint16", "count":40, "interval": 60},
+            {"deviceaddress": 1, "functioncode": 4, "startaddress": 3280, "type":"uint16", "count":20, "interval": 60}
+        ]
+    }
+}

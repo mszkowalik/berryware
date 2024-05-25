@@ -1,9 +1,9 @@
 # test_tasmota_adapter.py
 
 import unittest
-from tasmota_adapter import TasmotaAdapter
-from mqtt_adapter import MQTTAdapter
-from modbus_device import ModbusDevice
+from adapters.tasmota_adapter import TasmotaAdapter
+from adapters.mqtt_adapter import MQTTAdapter
+from adapters.modbus_device import ModbusDevice
 
 class TestErrorRate(unittest.TestCase):
     def setUp(self):
