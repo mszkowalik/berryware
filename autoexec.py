@@ -1,9 +1,7 @@
 import json
 import time
 from typing import List, Dict, Any
-from adapters.mqtt_adapter import mqtt
-from adapters.tasmota_adapter import tasmota
-from adapters.persist import persist
+from adapters import mqtt, tasmota
 
 # Predefined JSON dictionary of available registers
 registers_json = {
@@ -44,7 +42,16 @@ class MyDriver:
         print("Generating Modbus requests...")
         for device in self.devices:
             device_type = device["type"]
-            if device_type in self.registers:
+            if device_type in self.registers.keys():
                 for request in self.registers[device_type]["requests"]:
                     print(f"Generating Modbus request for device {device['name']} at address {request['startaddress']}")
 
+
+def main():
+    import time
+    print("Autoexec started")
+    
+    # This is a simple example of a long-running process
+    while True:
+        print("Running main loop")
+        time.sleep(1)
