@@ -24,3 +24,5 @@ class MQTTAdapter:
                     del self.subscriptions[topic]
             else:
                 del self.subscriptions[topic]
+
+mqtt = MQTTAdapter()

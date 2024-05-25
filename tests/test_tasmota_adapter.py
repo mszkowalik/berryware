@@ -62,5 +62,7 @@ class TestErrorRate(unittest.TestCase):
         error_rate = 1 - (success_count / attempts)
         self.assertAlmostEqual(error_rate, error_rate, delta=0.05)
 
+tasmota = TasmotaAdapter("EUI53EF3GD")
+
 if __name__ == '__main__':
     unittest.main()

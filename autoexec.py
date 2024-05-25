@@ -1,5 +1,5 @@
 from mqtt_adapter import mqtt
-import tasmota_adapter as tasmota
+from tasmota_adapter import tasmota
 
 class iterator:
     def __init__(self, mqtt_topic_modbussend, mqtt_topic_monitoring, mqtt_topic_config, mqtt_topic_interval, device_address, interval, inverter, inverter_sn):
@@ -47,7 +47,7 @@ class iterator:
         self.collect_data = False
 
     def clear_response(self):
-        for key in self.json_response:
+        for key in self.json_response.keys():
             self.json_response[key] = '-'
 
 def main():
