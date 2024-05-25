@@ -100,16 +100,16 @@ class TasmotaAdapter:
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-            
+
             if not filename:
                 filename = os.path.basename(url)
-            
+
             filepath = os.path.join('filesystem', filename)
-            
+
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
+
             file_size = os.path.getsize(filepath)
             self.logger.debug(f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes")
             return file_size
