@@ -80,15 +80,18 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.berry_code = []
         self.indentation = 0
         self.source_lines = []
-        self.local_variables = set()  # Track local variables within methods
+        self.local_variables = {}  # Track local variables within methods
         self.inside_method = False  # Track if we are inside a method
         self.method_mappings = MethodMappings()  # Use the method mappings
         self.name_changes = {
             'json.loads': 'json.load',
             'float': 'real',
             'None': 'nil',
+            'True': 'true',
+            'False': 'false'
         }
         self.defined_functions = set()  # Track defined functions
+        self.variables_in_scope = {}  # Track variables and their types in the current scope
 
     def set_source_code(self, source_code):
         self.source_lines = source_code.splitlines()
@@ -116,7 +119,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
         args = [arg.arg for arg in node.args.args if arg.arg != 'self']
         self.berry_code[-1] += ', '.join(args) + ")"
 
-        self.local_variables = set()  # Reset local variables for the new function
+        self.local_variables = {arg.arg: self.get_type_annotation(arg.annotation) for arg in node.args.args if arg.annotation}
+        self.variables_in_scope.update(self.local_variables)
         self.inside_method = True
         self.indentation += 1
         self.generic_visit(node)
@@ -124,30 +128,51 @@ class PythonToBerryConverter(ast.NodeVisitor):
         self.inside_method = False
         self.berry_code.append(f"{self.indent()}end")
 
-    def visit_Assign(self, node):
-        targets = [self.get_target(target) for target in node.targets]
-        value = self.get_node_value(node.value)
-
-        for target in targets:
-            if self.inside_method:
-                if target.startswith('self.'):
-                    # Instance variable assignment
-                    self.berry_code.append(f"{self.indent()}{target} = {value}")
-                else:
-                    # Local variable assignment within a method
-                    if target not in self.local_variables:
-                        self.berry_code.append(f"{self.indent()}var {target} = {value}")
-                        self.local_variables.add(target)
-                    else:
-                        self.berry_code.append(f"{self.indent()}{target} = {value}")
+    def handle_assignment(self, target, value, annotation=None):
+        target = self.get_node_value(target)
+        if self.inside_method:
+            if target.startswith('self.'):
+                self.berry_code.append(f"{self.indent()}{target} = {value}")
+                # self.local_variables[target] = annotation or 'unknown'
+                self.variables_in_scope[target] = annotation or 'unknown'
             else:
-                # Global or class-level variable assignment
                 if target not in self.local_variables:
                     self.berry_code.append(f"{self.indent()}var {target} = {value}")
-                    self.local_variables.add(target)
+                    self.local_variables[target] = annotation or 'unknown'
+                    self.variables_in_scope[target] = annotation or 'unknown'
                 else:
                     self.berry_code.append(f"{self.indent()}{target} = {value}")
+        else:
+            if target not in self.local_variables:
+                self.berry_code.append(f"{self.indent()}var {target} = {value}")
+                self.local_variables[target] = annotation or 'unknown'
+                self.variables_in_scope[target] = annotation or 'unknown'
+            else:
+                self.berry_code.append(f"{self.indent()}{target} = {value}")
 
+    def visit_AnnAssign(self, node):
+        value = self.get_node_value(node.value)
+        annotation = self.get_type_annotation(node.annotation)
+        self.handle_assignment(node.target, value, annotation)
+
+    def visit_Assign(self, node):
+        value = self.get_node_value(node.value)
+        inferred_type = self.infer_type(node.value)
+        for target in node.targets:
+            self.handle_assignment(target, value, inferred_type)
+
+    def infer_type(self, node):
+            if isinstance(node, ast.List):
+                return 'list'
+            elif isinstance(node, ast.Dict):
+                return 'map'
+            elif isinstance(node, ast.Bytes):
+                return 'bytes'
+            elif isinstance(node, ast.Call):
+                func_name = self.get_func_name(node.func)
+                if func_name in ['list', 'dict', 'bytes']:
+                    return func_name
+            return 'unknown'
 
     def visit_Name(self, node):
         self.berry_code.append(node.id)
@@ -205,9 +230,18 @@ class PythonToBerryConverter(ast.NodeVisitor):
         else:
             self.berry_code.append(f"{self.indent()}{self.get_node_value(node.value)}")
 
+    def get_type_annotation(self, annotation):
+        if annotation is None:
+            return None
+        elif isinstance(annotation, ast.Name):
+            return annotation.id
+        elif isinstance(annotation, ast.Subscript):
+            return self.get_node_value(annotation)
+        return None
+
     def visit_Call(self, node):
         func_name = self.get_func_name(node.func)
-        class_name = self.get_class_name(node.func)
+        object_name = self.get_full_attr_name(node.func)
         args = [self.get_node_value(arg) for arg in node.args]
 
         # Handle method references as callbacks
@@ -215,12 +249,14 @@ class PythonToBerryConverter(ast.NodeVisitor):
             if self.is_function_reference(arg):
                 args[i] = f"/-> {self.get_node_value(arg)}()"
         # Generalize handling for method calls based on class
-        if class_name:
-            berry_class_name = self.method_mappings.get_berry_class_name(class_name)
+        if object_name in self.variables_in_scope:
+        # if False:
+            obj_class = self.variables_in_scope[object_name]
+            berry_class_name = self.method_mappings.get_berry_class_name(obj_class)
             method_name = self.method_mappings.get_berry_method(berry_class_name, func_name)
             call_str = f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
         else:
-            call_str = f"{func_name}({', '.join(args)})"
+            call_str = f"{self.get_node_value(node.func)}({', '.join(args)})"
         self.berry_code.append(f"{self.indent()}{call_str}")
 
     def is_function_reference(self, node):
@@ -228,7 +264,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return node.attr in self.defined_functions  # Check if it's a known function
         return False
 
-    def get_class_name(self, node):
+    def get_object_name(self, node):
         if isinstance(node, ast.Attribute):
             value = node.value
             if isinstance(value, ast.Name):
@@ -353,6 +389,21 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return node.id
         return ""
 
+    def get_full_attr_name(self, node, stop_at_last=True):
+        if isinstance(node, ast.Attribute):
+            # If the parent is an Attribute or Name, continue recursively
+            if isinstance(node.value, (ast.Attribute, ast.Name)):
+                parent_full_name = self.get_full_attr_name(node.value, stop_at_last=False)
+                if stop_at_last:
+                    return parent_full_name
+                else:
+                    return parent_full_name + '.' + node.attr
+            else:
+                return node.attr
+        elif isinstance(node, ast.Name):
+            return node.id
+        return ""
+
     def get_node_value(self, node, parenthesize=False):
         if isinstance(node, ast.Lambda):
             return self.visit_Lambda(node)
@@ -366,8 +417,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 return 'nil'
             return str(node.value)
         elif isinstance(node, ast.Name):
-            if self.inside_method and node.id in self.local_variables:
-                return node.id
             return node.id
         elif isinstance(node, ast.Attribute):
             if isinstance(node.value, ast.Name) and node.value.id == 'self':
@@ -412,14 +461,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elif isinstance(node, ast.Tuple):
             return self.visit_Tuple(node)
         elif isinstance(node, ast.Call):
-            func_name = self.get_func_name(node.func)
-            class_name = self.get_class_name(node.func)
-            args = [self.get_node_value(arg) for arg in node.args]
-            if class_name:
-                berry_class_name = self.method_mappings.get_berry_class_name(class_name)
-                method_name = self.method_mappings.get_berry_method(berry_class_name, func_name)
-                return f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
-            return f"{func_name}({', '.join(args)})"
+            return self.visit_Call(node)
         elif isinstance(node, ast.JoinedStr):
             format_string_parts = []
             format_values = []
@@ -431,17 +473,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
                     format_values.append(self.get_node_value(value.value))
             format_string = ''.join(format_string_parts)
             return f"string.format('{format_string}', {', '.join(format_values)})"
-        return ""
-
-    def get_target(self, node):
-        if isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.Attribute):
-            value = self.get_node_value(node.value)
-            return f"{value}.{node.attr}"
-        elif isinstance(node, ast.Subscript):
-            value = self.get_node_value(node.value)
-            return f"{value}[{self.get_subscript(node.slice)}]"
         return ""
 
     def get_subscript(self, node):

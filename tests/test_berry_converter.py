@@ -47,8 +47,8 @@ else:
 """
         expected_output = """
 var value = 0
-var value2 = True
-var value3 = False
+var value2 = true
+var value3 = false
 if not(value or value2 or value3)
     do_something()
 elif check_data
@@ -145,7 +145,7 @@ except Exception as error_msg:
 """
         expected_output = """
 def mqtt_data()
-    return True
+    return true
 end
 try
     mqtt_data()
@@ -220,6 +220,38 @@ end
 if self.value == self.value2
     self.do_something()
 end"""
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
+        self.assertEqual(berry_code.strip(), expected_output.strip())
+
+    def test_list_append_method(self):
+        source_code = """
+my_list:list = []
+my_list.append(1)
+"""
+        expected_output = """
+var my_list = []
+my_list.push(1)
+"""
+        berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
+        self.assertEqual(berry_code.strip(), expected_output.strip())\
+
+    def test_list_inside_class_append_method(self):
+        source_code = """
+class TestClass:
+    def __init__(self):
+        self.my_list = []
+        self.my_list.append(1)
+"""
+        expected_output = """
+class TestClass
+    def init()
+        self.my_list = []
+        self.my_list.push(1)
+    end
+end
+"""
         berry_code = self.converter.convert(source_code)
         print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
