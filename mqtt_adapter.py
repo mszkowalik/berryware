@@ -1,16 +1,26 @@
+from singleton import singleton
+
+@singleton
 class MQTTAdapter:
     def __init__(self):
         self.subscriptions = {}
 
     def subscribe(self, topic, callback):
-        self.subscriptions[topic] = callback
-
-    def unsubscribe(self, topic):
-        if topic in self.subscriptions:
-            del self.subscriptions[topic]
+        if topic not in self.subscriptions:
+            self.subscriptions[topic] = []
+        self.subscriptions[topic].append(callback)
 
     def publish(self, topic, message):
         if topic in self.subscriptions:
-            self.subscriptions[topic](topic, message)
+            for callback in self.subscriptions[topic]:
+                callback(topic, message)
 
-mqtt = MQTTAdapter()
+    def unsubscribe(self, topic, callback=None):
+        if topic in self.subscriptions:
+            if callback:
+                if callback in self.subscriptions[topic]:
+                    self.subscriptions[topic].remove(callback)
+                if not self.subscriptions[topic]:
+                    del self.subscriptions[topic]
+            else:
+                del self.subscriptions[topic]
