@@ -1,11 +1,88 @@
 import ast
 
+class MethodMappings:
+    def __init__(self):
+        # Mapping Python class names to Berry class names
+        self.class_name_mappings = {
+            'dict': 'map',
+            'list': 'list',
+            'bytes': 'bytes'
+        }
+
+        # Mapping Python methods to Berry methods for specific classes
+        self.class_method_mappings = {
+            'list': {
+                'append': 'push',
+                'extend': 'concat',
+                'pop': 'pop',
+                'clear': 'clear',
+                'insert': 'insert',
+                'remove': 'remove',
+                'index': 'index',
+                'count': 'count',
+                'sort': 'sort',
+                'reverse': 'reverse',
+                'copy': 'copy',
+                'len': 'size',
+                'tostring': 'tostring',
+                'resize': 'resize',
+                'find': 'find',
+                'concat': 'concat',
+                'item': 'item',
+                'setitem': 'setitem',
+            },
+            'map': {
+                'keys': 'keys',
+                'values': 'values',
+                'items': 'items',
+                'get': 'item',
+                'pop': 'remove',
+                'clear': 'clear',
+                'update': 'update',
+                'setdefault': 'insert',
+                'copy': 'copy',
+                'len': 'size',
+                'contains': 'contains',
+                'find': 'find',
+                'insert': 'insert',
+                'tostring': 'tostring',
+            },
+            'bytes': {
+                'tostring': 'tostring',
+                'fromhex': 'fromhex',
+                'resize': 'resize',
+                'concat': 'concat',
+                'len': 'size',
+                'clear': 'clear',
+                'copy': 'copy',
+                'get': 'get',
+                'set': 'set',
+                'add': 'add',
+                'asstring': 'asstring',
+                'fromstring': 'fromstring',
+                'getbits': 'getbits',
+                'setbits': 'setbits',
+                'tob64': 'tob64',
+                'fromb64': 'fromb64',
+                'getfloat': 'getfloat',
+                'setfloat': 'setfloat',
+            }
+        }
+
+    def get_berry_class_name(self, python_class_name):
+        return self.class_name_mappings.get(python_class_name, python_class_name)
+
+    def get_berry_method(self, class_name, method_name):
+        return self.class_method_mappings.get(class_name, {}).get(method_name, method_name)
+
 class PythonToBerryConverter(ast.NodeVisitor):
     def __init__(self):
         self.berry_code = []
         self.indentation = 0
         self.source_lines = []
-        self.function_defs = set()  # Track function definitions
+        self.local_variables = set()  # Track local variables within methods
+        self.inside_method = False  # Track if we are inside a method
+        self.method_mappings = MethodMappings()  # Use the method mappings
         self.name_changes = {
             'json.loads': 'json.load',
             'float': 'real',
@@ -18,28 +95,69 @@ class PythonToBerryConverter(ast.NodeVisitor):
     def indent(self):
         return '    ' * self.indentation
 
+    def sanitize_name(self, name):
+        if name == '__init__':
+            return 'init'
+        return name.strip('_')
+
     def visit_ClassDef(self, node):
-        self.berry_code.append(f"{self.indent()}class {node.name}")
+        class_name = self.sanitize_name(node.name)
+        self.berry_code.append(f"{self.indent()}class {class_name}")
         self.indentation += 1
         self.generic_visit(node)
         self.indentation -= 1
         self.berry_code.append(f"{self.indent()}end")
 
     def visit_FunctionDef(self, node):
-        if node.name == '__init__':
-            self.berry_code.append(f"{self.indent()}def init(")
-        else:
-            self.berry_code.append(f"{self.indent()}def {node.name}(")
-
-        # Add function arguments
+        method_name = self.sanitize_name(node.name)
+        self.berry_code.append(f"{self.indent()}def {method_name}(")
         args = [arg.arg for arg in node.args.args if arg.arg != 'self']
         self.berry_code[-1] += ', '.join(args) + ")"
 
+        self.local_variables = set()  # Reset local variables for the new function
+        self.inside_method = True
         self.indentation += 1
-        self.function_defs.add(node.name)  # Add function name to set
         self.generic_visit(node)
         self.indentation -= 1
+        self.inside_method = False
         self.berry_code.append(f"{self.indent()}end")
+
+    def visit_Assign(self, node):
+        targets = [self.get_target(target) for target in node.targets]
+        value = self.get_node_value(node.value)
+
+        for target in targets:
+            if self.inside_method:
+                if target.startswith('self.'):
+                    self.berry_code.append(f"{self.indent()}{target} = {value}")
+                else:
+                    if target not in self.local_variables:
+                        self.berry_code.append(f"{self.indent()}var {target} = {value}")
+                        self.local_variables.add(target)
+                    else:
+                        self.berry_code.append(f"{self.indent()}{target} = {value}")
+            else:
+                self.berry_code.append(f"{self.indent()}var {target} = {value}")
+
+    def visit_Name(self, node):
+        self.berry_code.append(node.id)
+
+    def visit_Attribute(self, node):
+        value = self.get_node_value(node.value)
+        if isinstance(node.value, ast.Name) and node.value.id == 'self':
+            self.berry_code.append(f"{value}.{node.attr}")
+        else:
+            self.berry_code.append(f"{value}.{node.attr}")
+
+    def visit_Constant(self, node):
+        if isinstance(node.value, str):
+            self.berry_code.append(f"'{node.value}'")
+        elif node.value is None:
+            self.berry_code.append('nil')
+        else:
+            self.berry_code.append(f"{node.value}")
+
+    # Additional methods for handling specific nodes
 
     def visit_Lambda(self, node):
         args = [arg.arg for arg in node.args.args]
@@ -73,13 +191,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
         self.berry_code.append(f"{self.indent()}end")
 
-    def visit_Assign(self, node):
-        targets = [self.get_target(target) for target in node.targets]
-        value = self.get_node_value(node.value)
-        if isinstance(node.value, ast.List):
-            value = '[]'
-        self.berry_code.append(f"{self.indent()}{' = '.join(targets)} = {value}")
-
     def visit_Expr(self, node):
         if isinstance(node.value, ast.Call):
             self.visit(node.value)
@@ -88,29 +199,30 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
     def visit_Call(self, node):
         func_name = self.get_func_name(node.func)
+        class_name = self.get_class_name(node.func)
         args = [self.get_node_value(arg) for arg in node.args]
 
-        # Generalize handling for function callbacks
-        for i, arg in enumerate(args):
-            if isinstance(node.args[i], ast.Name) and self.is_function_reference(node.args[i]):
-                # Treat as a function reference
-                args[i] = f"/-> {arg}()"
-            elif isinstance(node.args[i], ast.Attribute) and self.is_function_reference(node.args[i]):
-                # Treat as a method reference
-                args[i] = f"/-> {arg}()"
-            elif isinstance(node.args[i], ast.Lambda):
-                args[i] = f"/-> {arg}"
+        # Handle method references as callbacks
+        for i, arg in enumerate(node.args):
+            if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name) and arg.value.id == 'self':
+                args[i] = f"/-> {self.get_node_value(arg)}()"
 
-        debug_info = f"{func_name}({', '.join(args)})"
-        print(f"DEBUG: Visiting call: {debug_info}")
-        self.berry_code.append(f"{self.indent()}{debug_info}")
+        # Generalize handling for method calls based on class
+        if class_name:
+            berry_class_name = self.method_mappings.get_berry_class_name(class_name)
+            method_name = self.method_mappings.get_berry_method(berry_class_name, func_name)
+            call_str = f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
+        else:
+            call_str = f"{func_name}({', '.join(args)})"
 
-    def is_function_reference(self, node):
-        if isinstance(node, ast.Name):
-            return node.id in self.function_defs
+        self.berry_code.append(f"{self.indent()}{call_str}")
+
+    def get_class_name(self, node):
         if isinstance(node, ast.Attribute):
-            return node.attr in self.function_defs
-        return False
+            value = node.value
+            if isinstance(value, ast.Name):
+                return self.get_node_value(value)
+        return None
 
     def visit_If(self, node):
         if isinstance(node.test, ast.Compare) and isinstance(node.test.ops[0], ast.In):
@@ -217,60 +329,15 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elements = [self.get_node_value(elt) for elt in node.elts]
         return "(" + ", ".join(elements) + ")"
 
-    def get_target(self, node):
-        if isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.Attribute):
-            return f"{self.get_target(node.value)}.{node.attr}"
-        elif isinstance(node, ast.Subscript):
-            return f"{self.get_target(node.value)}[{self.get_subscript(node.slice)}]"
-        elif isinstance(node, ast.Call):
-            return self.get_node_value(node)
-        else:
-            raise ValueError(f"Unsupported target type: {type(node)}")
-
-    def get_subscript(self, node):
-        if isinstance(node, ast.Index):
-            return self.get_node_value(node.value)
-        elif isinstance(node, ast.Slice):
-            lower = self.get_node_value(node.lower) if node.lower else ''
-            upper = self.get_node_value(node.upper) if node.upper else ''
-            step = self.get_node_value(node.step) if node.step else ''
-            return f"{lower}:{upper}:{step}"
-        elif isinstance(node, ast.Subscript):
-            return self.get_target(node)
-        elif isinstance(node, ast.Constant):
-            return self.get_node_value(node)
-        elif isinstance(node, ast.Name):
-            return node.id
-        elif isinstance(node, ast.BinOp):
-            return self.get_node_value(node)
-        elif isinstance(node, ast.UnaryOp):
-            return self.get_node_value(node)
-        else:
-            raise ValueError(f"Unsupported subscript type: {type(node)}")
-
     def visit_AugAssign(self, node):
         target = self.get_node_value(node.target)
         op = self.get_operator(node.op)
         value = self.get_node_value(node.value)
         self.berry_code.append(f"{self.indent()}{target} {op}= {value}")
 
-    def visit_Attribute(self, node):
-        self.berry_code.append(f"{self.get_func_name(node)}")
-
-    def visit_Name(self, node):
-        self.berry_code.append(f"{node.id}")
-
-    def visit_Constant(self, node):
-        if isinstance(node.value, str):
-            self.berry_code.append(f"'{node.value}'")
-        else:
-            self.berry_code.append(f"{node.value}")
-
     def get_func_name(self, node):
         if isinstance(node, ast.Attribute):
-            return f"{self.get_func_name(node.value)}.{node.attr}"
+            return node.attr
         elif isinstance(node, ast.Name):
             return node.id
         return ""
@@ -284,11 +351,17 @@ class PythonToBerryConverter(ast.NodeVisitor):
             if isinstance(node.value, str):
                 value = node.value.replace('\n', '\\n')
                 return f"'{value}'"
+            elif node.value is None:
+                return 'nil'
             return str(node.value)
         elif isinstance(node, ast.Name):
+            if self.inside_method and node.id in self.local_variables:
+                return node.id
             return node.id
         elif isinstance(node, ast.Attribute):
-            return self.get_func_name(node)
+            if isinstance(node.value, ast.Name) and node.value.id == 'self':
+                return f"self.{node.attr}"
+            return f"{self.get_node_value(node.value)}.{node.attr}"
         elif isinstance(node, ast.Subscript):
             return f"{self.get_node_value(node.value)}[{self.get_subscript(node.slice)}]"
         elif isinstance(node, ast.BinOp):
@@ -329,15 +402,14 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return self.visit_Tuple(node)
         elif isinstance(node, ast.Call):
             func_name = self.get_func_name(node.func)
+            class_name = self.get_class_name(node.func)
             args = [self.get_node_value(arg) for arg in node.args]
-            if func_name == "str.format":
-                # Handle string formatting
-                format_string = args[0]
-                format_args = ", ".join(args[1:])
-                return f"string.format({format_string}, {format_args})"
+            if class_name:
+                berry_class_name = self.method_mappings.get_berry_class_name(class_name)
+                method_name = self.method_mappings.get_berry_method(berry_class_name, func_name)
+                return f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
             return f"{func_name}({', '.join(args)})"
         elif isinstance(node, ast.JoinedStr):
-            # Convert f-string to string.format
             format_string_parts = []
             format_values = []
             for value in node.values:
@@ -348,6 +420,27 @@ class PythonToBerryConverter(ast.NodeVisitor):
                     format_values.append(self.get_node_value(value.value))
             format_string = ''.join(format_string_parts)
             return f"string.format('{format_string}', {', '.join(format_values)})"
+        return ""
+
+    def get_target(self, node):
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Attribute):
+            value = self.get_node_value(node.value)
+            return f"{value}.{node.attr}"
+        elif isinstance(node, ast.Subscript):
+            value = self.get_node_value(node.value)
+            return f"{value}[{self.get_subscript(node.slice)}]"
+        return ""
+
+    def get_subscript(self, node):
+        if isinstance(node, ast.Index):
+            return self.get_node_value(node.value)
+        elif isinstance(node, ast.Slice):
+            lower = self.get_node_value(node.lower) if node.lower else ''
+            upper = self.get_node_value(node.upper) if node.upper else ''
+            step = self.get_node_value(node.step) if node.step else ''
+            return f"{lower}:{upper}:{step}"
         return ""
 
     def get_operator(self, op):
@@ -367,48 +460,23 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return "<<"
         elif isinstance(op, ast.RShift):
             return ">>"
-        elif isinstance(op, ast.NotEq):
-            return "!="
-        elif isinstance(op, ast.Eq):
-            return "=="
-        elif isinstance(op, ast.Lt):
-            return "<"
-        elif isinstance(op, ast.LtE):
-            return "<="
-        elif isinstance(op, ast.Gt):
-            return ">"
-        elif isinstance(op, ast.GtE):
-            return ">="
-        elif isinstance(op, ast.AugAssign):  # Add support for augmented assignment
-            if isinstance(op.op, ast.Add):
-                return "+="
-            elif isinstance(op.op, ast.Sub):
-                return "-="
-            elif isinstance(op.op, ast.Mult):
-                return "*="
-            elif isinstance(op.op, ast.Div):
-                return "/="
+        elif isinstance(op, ast.BitOr):
+            return "|"
+        elif isinstance(op, ast.BitAnd):
+            return "&"
+        elif isinstance(op, ast.BitXor):
+            return "^"
+        elif isinstance(op, ast.FloorDiv):
+            return "//"
+        elif isinstance(op, ast.Invert):
+            return "~"
+        elif isinstance(op, ast.Not):
+            return "not"
         elif isinstance(op, ast.And):
             return "and"
         elif isinstance(op, ast.Or):
             return "or"
-        elif isinstance(op, ast.Not):
-            return "not"
-        elif isinstance(op, ast.BitOr):
-            return "|"
-        elif isinstance(op, ast.BitXor):
-            return "^"
-        elif isinstance(op, ast.BitAnd):
-            return "&"
-        elif isinstance(op, ast.FloorDiv):
-            return "//"
-        elif isinstance(op, ast.Not):
-            return "not "
-        elif isinstance(op, ast.IsNot):
-            return "!="
-        else:
-            return ""
-
+        return ""
 
     def convert(self, source_code):
         # Store the source code lines for error context
