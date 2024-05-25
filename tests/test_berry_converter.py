@@ -100,6 +100,7 @@ address_map = {
 var address_map = {}
 address_map = {'3034': {'name': 'PV-V-A', 'functioncode': 4, 'type': 'uint16', 'count': 1, 'sum': 0}}"""
         berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
     def test_list_conversion(self):
@@ -189,7 +190,6 @@ class TestClass:
 class TestClass
     var interval = nil
     var timer = nil
-
     def init(interval, timer)
         self.interval = interval
         self.timer = timer

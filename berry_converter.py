@@ -88,6 +88,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             'float': 'real',
             'None': 'nil',
         }
+        self.defined_functions = set()  # Track defined functions
 
     def set_source_code(self, source_code):
         self.source_lines = source_code.splitlines()
@@ -110,6 +111,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node):
         method_name = self.sanitize_name(node.name)
+        self.defined_functions.add(method_name)  # Track the function name
         self.berry_code.append(f"{self.indent()}def {method_name}(")
         args = [arg.arg for arg in node.args.args if arg.arg != 'self']
         self.berry_code[-1] += ', '.join(args) + ")"
@@ -157,8 +159,6 @@ class PythonToBerryConverter(ast.NodeVisitor):
         else:
             self.berry_code.append(f"{node.value}")
 
-    # Additional methods for handling specific nodes
-
     def visit_Lambda(self, node):
         args = [arg.arg for arg in node.args.args]
         body = self.get_node_value(node.body)
@@ -204,9 +204,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
 
         # Handle method references as callbacks
         for i, arg in enumerate(node.args):
-            if isinstance(arg, ast.Attribute) and isinstance(arg.value, ast.Name) and arg.value.id == 'self':
+            if self.is_function_reference(arg):
                 args[i] = f"/-> {self.get_node_value(arg)}()"
-
         # Generalize handling for method calls based on class
         if class_name:
             berry_class_name = self.method_mappings.get_berry_class_name(class_name)
@@ -214,8 +213,12 @@ class PythonToBerryConverter(ast.NodeVisitor):
             call_str = f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
         else:
             call_str = f"{func_name}({', '.join(args)})"
-
         self.berry_code.append(f"{self.indent()}{call_str}")
+
+    def is_function_reference(self, node):
+        if isinstance(node, ast.Attribute):
+            return node.attr in self.defined_functions  # Check if it's a known function
+        return False
 
     def get_class_name(self, node):
         if isinstance(node, ast.Attribute):
@@ -349,7 +352,7 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return f"/->{node.name}()"
         elif isinstance(node, ast.Constant):
             if isinstance(node.value, str):
-                value = node.value.replace('\n', '\\n')
+                value = node.value.replace('\n', '\\n') # Escape newlines
                 return f"'{value}'"
             elif node.value is None:
                 return 'nil'
@@ -460,23 +463,47 @@ class PythonToBerryConverter(ast.NodeVisitor):
             return "<<"
         elif isinstance(op, ast.RShift):
             return ">>"
-        elif isinstance(op, ast.BitOr):
-            return "|"
-        elif isinstance(op, ast.BitAnd):
-            return "&"
-        elif isinstance(op, ast.BitXor):
-            return "^"
-        elif isinstance(op, ast.FloorDiv):
-            return "//"
-        elif isinstance(op, ast.Invert):
-            return "~"
-        elif isinstance(op, ast.Not):
-            return "not"
+        elif isinstance(op, ast.NotEq):
+            return "!="
+        elif isinstance(op, ast.Eq):
+            return "=="
+        elif isinstance(op, ast.Lt):
+            return "<"
+        elif isinstance(op, ast.LtE):
+            return "<="
+        elif isinstance(op, ast.Gt):
+            return ">"
+        elif isinstance(op, ast.GtE):
+            return ">="
+        elif isinstance(op, ast.AugAssign):  # Add support for augmented assignment
+            if isinstance(op.op, ast.Add):
+                return "+="
+            elif isinstance(op.op, ast.Sub):
+                return "-="
+            elif isinstance(op.op, ast.Mult):
+                return "*="
+            elif isinstance(op.op, ast.Div):
+                return "/="
         elif isinstance(op, ast.And):
             return "and"
         elif isinstance(op, ast.Or):
             return "or"
-        return ""
+        elif isinstance(op, ast.Not):
+            return "not"
+        elif isinstance(op, ast.BitOr):
+            return "|"
+        elif isinstance(op, ast.BitXor):
+            return "^"
+        elif isinstance(op, ast.BitAnd):
+            return "&"
+        elif isinstance(op, ast.FloorDiv):
+            return "//"
+        elif isinstance(op, ast.Not):
+            return "not "
+        elif isinstance(op, ast.IsNot):
+            return "!="
+        else:
+            return ""
 
     def convert(self, source_code):
         # Store the source code lines for error context
