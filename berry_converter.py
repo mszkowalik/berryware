@@ -240,6 +240,10 @@ class PythonToBerryConverter(ast.NodeVisitor):
         return None
 
     def visit_Call(self, node):
+        call_str = self.handle_call(node)
+        self.berry_code.append(f"{self.indent()}{call_str}")
+
+    def handle_call(self, node):
         func_name = self.get_func_name(node.func)
         object_name = self.get_full_attr_name(node.func)
         args = [self.get_node_value(arg) for arg in node.args]
@@ -250,14 +254,13 @@ class PythonToBerryConverter(ast.NodeVisitor):
                 args[i] = f"/-> {self.get_node_value(arg)}()"
         # Generalize handling for method calls based on class
         if object_name in self.variables_in_scope:
-        # if False:
             obj_class = self.variables_in_scope[object_name]
             berry_class_name = self.method_mappings.get_berry_class_name(obj_class)
             method_name = self.method_mappings.get_berry_method(berry_class_name, func_name)
             call_str = f"{self.get_node_value(node.func.value)}.{method_name}({', '.join(args)})"
         else:
             call_str = f"{self.get_node_value(node.func)}({', '.join(args)})"
-        self.berry_code.append(f"{self.indent()}{call_str}")
+        return call_str
 
     def is_function_reference(self, node):
         if isinstance(node, ast.Attribute):
@@ -461,7 +464,8 @@ class PythonToBerryConverter(ast.NodeVisitor):
         elif isinstance(node, ast.Tuple):
             return self.visit_Tuple(node)
         elif isinstance(node, ast.Call):
-            return self.visit_Call(node)
+            return self.handle_call(node)
+
         elif isinstance(node, ast.JoinedStr):
             format_string_parts = []
             format_values = []

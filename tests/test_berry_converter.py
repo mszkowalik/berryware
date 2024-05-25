@@ -79,6 +79,7 @@ web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows
 var sequencer = 3
 var web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', sequencer + 2)"""
         berry_code = self.converter.convert(source_code)
+        print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
     def test_f_string_conversion(self):
