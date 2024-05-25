@@ -1,13 +1,23 @@
-# persist.py
 import json
 import os
-from adapters.singleton import singleton
+from .singleton import singleton
+
 
 @singleton
 class Persist:
-    def __init__(self, filename="_persist.json"):
-        self.filename = filename
+    def __init__(self, filename=None):
+        if filename is None:
+            base_dir = os.path.dirname(os.path.abspath(__file__))
+            self.filename = os.path.join(base_dir, "filesystem", "_persist.json")
+        else:
+            self.filename = filename
+        self._ensure_directory_exists()
         self.data = self._load()
+
+    def _ensure_directory_exists(self):
+        directory = os.path.dirname(self.filename)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
 
     def _load(self):
         if os.path.exists(self.filename):
