@@ -5,7 +5,7 @@ import random
 import requests
 import logging
 from .mqtt_adapter import MQTTAdapter
-from .modbus_bridge import ModbusBridge
+from .modules.modbus_bridge import ModbusBridge
 
 class TasmotaAdapter:
     def __init__(self, EUI):
