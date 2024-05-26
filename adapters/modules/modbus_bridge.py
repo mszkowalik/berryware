@@ -22,14 +22,14 @@ class ModbusBridge:
             type = modbus_send.get("type", "uint16")
 
             # Immediate response
-            self.tasmota_adapter.cmd_logger.debug('RESULT = {"ModbusSend":"Done"}')
-            self.tasmota_adapter.publish_result('{"ModbusSend":"Done"}', 'RESULT')
+            result = {"ModbusSend": "Done"}
+            self.tasmota_adapter.publish_result(result, 'RESULT', 'stat')
 
             # Simulate delayed device response
             delay = random.uniform(0.05, 0.15)
             threading.Timer(delay, self._send_modbus_response, args=(device_address, function_code, start_address, count, type)).start()
 
-            return {"ModbusSend": "Done"}
+            return result
         except json.JSONDecodeError:
             return {"error": "Invalid JSON format"}
 
@@ -41,7 +41,7 @@ class ModbusBridge:
                 full_response = {"ModbusReceived": response}
                 response_json = json.dumps(full_response)
                 self.tasmota_adapter.cmd_logger.debug(f'RESULT = {response_json}')
-                self.tasmota_adapter.publish_result(response_json, 'RESULT')
+                self.tasmota_adapter.publish_result(response_json, 'RESULT', 'tele')
                 break
 
     def handle_set_baudrate(self, command_payload):
@@ -49,13 +49,13 @@ class ModbusBridge:
             baudrate = int(command_payload)
             if 1200 <= baudrate <= 115200:
                 self.tasmota_adapter.baudrate = baudrate
-                response = json.dumps({"Baudrate": baudrate})
-                self.tasmota_adapter.cmd_logger.debug(f'RESULT = {response}')
-                self.tasmota_adapter.publish_result(response, 'RESULT')
-                return {"Baudrate": baudrate}
+                result = {"Baudrate": baudrate}
+                self.tasmota_adapter.publish_result(result, 'RESULT', 'stat')
+                return result
             return {"error": "Invalid baudrate"}
         except ValueError:
             return {"error": "Invalid baudrate format"}
+
 
     def handle_set_config(self, command_payload):
         try:
@@ -63,10 +63,9 @@ class ModbusBridge:
             valid_configs = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
             if config in valid_configs:
                 self.tasmota_adapter.serial_config = config
-                response = json.dumps({"SerialConfig": config})
-                self.tasmota_adapter.cmd_logger.debug(f'RESULT = {response}')
-                self.tasmota_adapter.publish_result(response, 'RESULT')
-                return {"SerialConfig": config}
+                result = {"SerialConfig": config}
+                self.tasmota_adapter.publish_result(result, 'RESULT', 'stat')
+                return result
             return {"error": "Invalid serial config"}
         except ValueError:
             return {"error": "Invalid serial config format"}

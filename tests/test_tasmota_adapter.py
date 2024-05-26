@@ -16,7 +16,7 @@ class TestTasmotaAdapter(unittest.TestCase):
         })
         self.tasmota.add_device(self.device)
         self.received_messages = []
-        self.mqtt.subscribe(f"tele/EUI53EF3GD/RESULT", self.on_message)
+        self.mqtt.subscribe(f"#", self.on_message)
 
         # Create filesystem directory if it doesn't exist
         if not os.path.exists('filesystem'):
@@ -36,8 +36,8 @@ class TestTasmotaAdapter(unittest.TestCase):
 
         self.tasmota.cmd(command)
         self.assertEqual(len(self.received_messages), 1)
-        topic, message = self.received_messages[0]
-        self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
+        topic, message = self.received_messages[-1]
+        self.assertEqual(topic, f"stat/{self.tasmota.EUI}/RESULT")
         self.assertIn("ModbusSend", message)
 
     def test_error_rate(self):
@@ -138,7 +138,8 @@ class TestTasmotaAdapter(unittest.TestCase):
         self.tasmota.cmd(command)
         time.sleep(0.2)  # Wait for the delayed response
         self.assertTrue(len(self.received_messages) > 1)
-        topic, message = self.received_messages[1]
+        print(self.received_messages)
+        topic, message = self.received_messages[-1] ## last message
         self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
         self.assertIn("ModbusReceived", message)
 

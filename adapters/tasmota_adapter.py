@@ -50,9 +50,11 @@ class TasmotaAdapter:
     def get_free_heap(self):
         return self.heap
 
-    def publish_result(self, payload: str, subtopic: str):
-        self.mqtt.publish(f"tele/{self.EUI}/{subtopic}", payload)
-        self.cmd_logger.debug(f"Published result to {subtopic} with payload: {payload}")
+    def publish_result(self, result_dict: dict, subtopic: str, prefix: str = 'tele'):
+        payload = json.dumps(result_dict)
+        topic = f"{prefix}/{self.EUI}/{subtopic}"
+        self.mqtt.publish(topic, payload)
+        self.cmd_logger.debug(f"RESULT = {payload}")
 
     def publish_rule(self, payload: str) -> bool:
         self.cmd_logger.debug(f"Published rule with payload: {payload}")
@@ -64,10 +66,13 @@ class TasmotaAdapter:
             command_name, command_payload = command_str.split(' ', 1)
             if command_name in self.commands:
                 handler = self.commands[command_name]
-                return handler(command_payload)
+                result = handler(command_payload)
+                if not mute:
+                    return result
         except ValueError:
             return {"error": "Invalid command format"}
         return {"error": "Unknown command"}
+
 
     def memory(self, key: str = None):
         mem_stats = {
