@@ -1,6 +1,8 @@
-from adapters import tasmota
+## PYTHON SPECIFIC
+from adapters import tasmota, mqtt
+## PYTHON SPECIFIC
 
-class MyDriver:
+class Dongle:
     def __init__(self):
         self.counter = 0
 
@@ -11,8 +13,9 @@ class MyDriver:
     def every_second(self):
         print("every_second called")
 
+## PYTHON SPECIFIC
 def main():
-    driver = MyDriver()
+    driver = Dongle()
     tasmota.add_driver(driver)
     print("Driver added to Tasmota")
 

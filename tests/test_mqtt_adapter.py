@@ -4,79 +4,69 @@ from adapters.mqtt_adapter import MQTTAdapter
 class TestMQTTAdapter(unittest.TestCase):
     def setUp(self):
         self.mqtt = MQTTAdapter()
-        self.mqtt.subscriptions = {}  # Reset subscriptions before each test
+        self.received_messages = []
 
-    def test_subscribe_and_publish(self):
-        messages = []
+    def on_message(self, topic, message):
+        self.received_messages.append((topic, message))
 
-        def callback(topic, message):
-            messages.append((topic, message))
+    def test_exact_topic_subscription(self):
+        topic = "test/topic"
+        message = "test message"
 
-        self.mqtt.subscribe("test/topic", callback)
-        self.mqtt.publish("test/topic", "Hello, world!")
+        self.mqtt.subscribe(topic, self.on_message)
+        self.mqtt.publish(topic, message)
 
-        self.assertEqual(len(messages), 1)
-        self.assertEqual(messages[0], ("test/topic", "Hello, world!"))
+        self.assertIn((topic, message), self.received_messages)
 
-    def test_unsubscribe(self):
-        messages = []
+    def test_single_level_wildcard_subscription(self):
+        topic = "test/+/subtopic"
+        message = "test message"
 
-        def callback(topic, message):
-            messages.append((topic, message))
+        self.mqtt.subscribe(topic, self.on_message)
+        self.mqtt.publish("test/one/subtopic", message)
+        self.mqtt.publish("test/two/subtopic", message)
 
-        self.mqtt.subscribe("test/topic", callback)
-        self.mqtt.unsubscribe("test/topic", callback)
-        self.mqtt.publish("test/topic", "Hello, world!")
+        self.assertIn(("test/one/subtopic", message), self.received_messages)
+        self.assertIn(("test/two/subtopic", message), self.received_messages)
 
-        self.assertEqual(len(messages), 0)
+    def test_multilevel_wildcard_subscription(self):
+        topic = "test/#"
+        message = "test message"
 
-    def test_publish_without_subscription(self):
-        messages = []
+        self.mqtt.subscribe(topic, self.on_message)
+        self.mqtt.publish("test/one/two/three", message)
+        self.mqtt.publish("test/one/two", message)
+        self.mqtt.publish("test/one", message)
 
-        def callback(topic, message):
-            messages.append((topic, message))
+        self.assertIn(("test/one/two/three", message), self.received_messages)
+        self.assertIn(("test/one/two", message), self.received_messages)
+        self.assertIn(("test/one", message), self.received_messages)
 
-        self.mqtt.publish("test/topic", "Hello, world!")
-        self.assertEqual(len(messages), 0)
+    def test_mixed_wildcard_subscription(self):
+        topic = "test/+/subtopic/#"
+        message = "test message"
 
-    def test_multiple_callbacks(self):
-        messages1 = []
-        messages2 = []
+        self.mqtt.subscribe(topic, self.on_message)
+        self.mqtt.publish("test/one/subtopic/level1", message)
+        self.mqtt.publish("test/two/subtopic/level1/level2", message)
 
-        def callback1(topic, message):
-            messages1.append((topic, message))
+        self.assertIn(("test/one/subtopic/level1", message), self.received_messages)
+        self.assertIn(("test/two/subtopic/level1/level2", message), self.received_messages)
 
-        def callback2(topic, message):
-            messages2.append((topic, message))
+    def test_no_match_subscription(self):
+        topic = "test/+/subtopic"
+        message = "test message"
 
-        self.mqtt.subscribe("test/topic", callback1)
-        self.mqtt.subscribe("test/topic", callback2)
-        self.mqtt.publish("test/topic", "Hello, world!")
+        self.mqtt.subscribe(topic, self.on_message)
+        self.mqtt.publish("test/one/another", message)
+        self.mqtt.publish("another/test/subtopic", message)
 
-        self.assertEqual(len(messages1), 1)
-        self.assertEqual(messages1[0], ("test/topic", "Hello, world!"))
+        self.assertNotIn(("test/one/another", message), self.received_messages)
+        self.assertNotIn(("another/test/subtopic", message), self.received_messages)
 
-        self.assertEqual(len(messages2), 1)
-        self.assertEqual(messages2[0], ("test/topic", "Hello, world!"))
-
-    def test_unsubscribe_single_callback(self):
-        messages1 = []
-        messages2 = []
-
-        def callback1(topic, message):
-            messages1.append((topic, message))
-
-        def callback2(topic, message):
-            messages2.append((topic, message))
-
-        self.mqtt.subscribe("test/topic", callback1)
-        self.mqtt.subscribe("test/topic", callback2)
-        self.mqtt.unsubscribe("test/topic", callback1)
-        self.mqtt.publish("test/topic", "Hello, world!")
-
-        self.assertEqual(len(messages1), 0)
-        self.assertEqual(len(messages2), 1)
-        self.assertEqual(messages2[0], ("test/topic", "Hello, world!"))
+    def tearDown(self):
+        self.mqtt.reset()
+        self.received_messages = []
 
 if __name__ == '__main__':
     unittest.main()

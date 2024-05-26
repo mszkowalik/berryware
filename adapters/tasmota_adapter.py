@@ -5,6 +5,7 @@ import requests
 import logging
 from adapters.mqtt_adapter import MQTTAdapter
 
+
 class TasmotaAdapter:
     def __init__(self, EUI):
         self.EUI = EUI
@@ -17,8 +18,16 @@ class TasmotaAdapter:
         self.running = False
 
         # Create the filesystem directory if it doesn't exist
-        if not os.path.exists('filesystem'):
-            os.makedirs('filesystem')
+        if not os.path.exists("filesystem"):
+            os.makedirs("filesystem")
+
+        # Subscribe to all MQTT messages
+        self.mqtt.subscribe("#", self.handle_mqtt_message)
+
+    def handle_mqtt_message(self, topic, message):
+        for driver in self.drivers:
+            if hasattr(driver, "mqtt_data"):
+                driver.mqtt_data(topic, 0, message, len(message))
 
     def add_device(self, device):
         self.devices.append(device)
@@ -47,20 +56,24 @@ class TasmotaAdapter:
             count = modbus_cmd["count"]
 
             for device in self.devices:
-                response = device.get_response(device_address, function_code, start_address, count)
+                response = device.get_response(
+                    device_address, function_code, start_address, count
+                )
                 if response:
-                    self.mqtt.publish(f"tele/{self.EUI}/ModbusReceived", json.dumps(response))
+                    self.mqtt.publish(
+                        f"tele/{self.EUI}/ModbusReceived", json.dumps(response)
+                    )
                     return response
         return {}
 
     def memory(self, key: str = None):
         mem_stats = {
-            'iram_free': 41,
-            'frag': 51,
-            'program_free': 1856,
-            'flash': 4096,
-            'heap_free': 226,
-            'program': 1679
+            "iram_free": 41,
+            "frag": 51,
+            "program_free": 1856,
+            "flash": 4096,
+            "heap_free": 226,
+            "program": 1679,
         }
         if key:
             return mem_stats.get(key)
@@ -69,7 +82,7 @@ class TasmotaAdapter:
     def add_rule(self, trigger: str, f, id: any = None):
         if trigger not in self.rules:
             self.rules[trigger] = []
-        self.rules[trigger].append({'function': f, 'id': id})
+        self.rules[trigger].append({"function": f, "id": id})
         self.logger.debug(f"Added rule with trigger: {trigger}")
 
     def remove_rule(self, trigger: str, id: any = None):
@@ -78,7 +91,9 @@ class TasmotaAdapter:
                 del self.rules[trigger]
                 self.logger.debug(f"Removed all rules with trigger: {trigger}")
             else:
-                self.rules[trigger] = [rule for rule in self.rules[trigger] if rule['id'] != id]
+                self.rules[trigger] = [
+                    rule for rule in self.rules[trigger] if rule["id"] != id
+                ]
                 if not self.rules[trigger]:
                     del self.rules[trigger]
                 self.logger.debug(f"Removed rule with trigger: {trigger} and id: {id}")
@@ -104,14 +119,16 @@ class TasmotaAdapter:
             if not filename:
                 filename = os.path.basename(url)
 
-            filepath = os.path.join('filesystem', filename)
+            filepath = os.path.join("filesystem", filename)
 
-            with open(filepath, 'wb') as f:
+            with open(filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
 
             file_size = os.path.getsize(filepath)
-            self.logger.debug(f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes")
+            self.logger.debug(
+                f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes"
+            )
             return file_size
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch URL: {url} with error: {e}")
@@ -134,15 +151,33 @@ class TasmotaAdapter:
         self.run_periodic_callbacks()
 
     def stop(self):
-        self.running = False
         self.logger.debug("Stopping TasmotaAdapter")
+        for driver in self.drivers:
+            if hasattr(driver, "save_before_restart"):
+                driver.save_before_restart()
+        self.running = False
 
     def run_periodic_callbacks(self):
         if self.running:
             for driver in self.drivers:
-                if hasattr(driver, 'every_250ms'):
+                if hasattr(driver, "every_50ms"):
+                    driver.every_50ms()
+                if hasattr(driver, "every_100ms"):
+                    driver.every_100ms()
+                if hasattr(driver, "every_250ms"):
                     driver.every_250ms()
-            self.set_timer(250, self.run_periodic_callbacks)
+            self.set_timer(50, self.run_periodic_callbacks)
             for driver in self.drivers:
-                if hasattr(driver, 'every_second'):
+                if hasattr(driver, "every_second"):
                     driver.every_second()
+
+    def button_pressed(self):
+        for driver in self.drivers:
+            if hasattr(driver, "button_pressed"):
+                driver.button_pressed()
+
+
+# Usage example
+if __name__ == "__main__":
+    tasmota_adapter = TasmotaAdapter("EUI53EF3GD")
+    # Add your custom driver and other setup here
