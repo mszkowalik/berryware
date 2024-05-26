@@ -35,7 +35,7 @@ class ModbusDevice:
             "DeviceAddress": device_address,
             "FunctionCode": function_code,
             "StartAddress": start_address,
-            "Length": count,
+            "Length": count * 2,  # Assuming each register is 2 bytes
             "Count": count,
             "Values": values
         }

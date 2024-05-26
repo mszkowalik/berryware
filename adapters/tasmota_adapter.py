@@ -1,10 +1,11 @@
 import threading
 import json
 import os
+import random
 import requests
 import logging
-from adapters.mqtt_adapter import MQTTAdapter
-
+from .mqtt_adapter import MQTTAdapter
+from .modbus_bridge import ModbusBridge
 
 class TasmotaAdapter:
     def __init__(self, EUI):
@@ -15,19 +16,32 @@ class TasmotaAdapter:
         self.rules = {}
         self.drivers = []
         self.logger = logging.getLogger(self.__class__.__name__)
+        self.cmd_logger = logging.getLogger('command_line')
+        self.cmd_logger.setLevel(logging.DEBUG)
         self.running = False
+        self.baudrate = 9600
+        self.serial_config = 3  # Default to 8N1
+        self.commands = {}
 
         # Create the filesystem directory if it doesn't exist
-        if not os.path.exists("filesystem"):
-            os.makedirs("filesystem")
+        if not os.path.exists('filesystem'):
+            os.makedirs('filesystem')
 
         # Subscribe to all MQTT messages
-        self.mqtt.subscribe("#", self.handle_mqtt_message)
+        self.mqtt.subscribe('#', self.handle_mqtt_message)
+
+        # Initialize command modules
+        self.command_modules = {
+            "ModbusBridge": ModbusBridge(self)
+        }
 
     def handle_mqtt_message(self, topic, message):
         for driver in self.drivers:
-            if hasattr(driver, "mqtt_data"):
+            if hasattr(driver, 'mqtt_data'):
                 driver.mqtt_data(topic, 0, message, len(message))
+
+    def register_command(self, command_name, handler):
+        self.commands[command_name] = handler
 
     def add_device(self, device):
         self.devices.append(device)
@@ -38,42 +52,31 @@ class TasmotaAdapter:
 
     def publish_result(self, payload: str, subtopic: str):
         self.mqtt.publish(f"tele/{self.EUI}/{subtopic}", payload)
-        self.logger.debug(f"Published result to {subtopic} with payload: {payload}")
+        self.cmd_logger.debug(f"Published result to {subtopic} with payload: {payload}")
 
     def publish_rule(self, payload: str) -> bool:
-        self.logger.debug(f"Published rule with payload: {payload}")
+        self.cmd_logger.debug(f"Published rule with payload: {payload}")
         return True
 
-    def cmd(self, command, mute: bool = False):
-        self.logger.debug(f"Executing Tasmota command: {command}")
-        if isinstance(command, str) and command == "status5":
-            return {"Status": {"Topic": "dummy_topic"}}
-        elif isinstance(command, dict) and "ModBusSend" in command:
-            modbus_cmd = command["ModBusSend"]
-            device_address = modbus_cmd["deviceaddress"]
-            function_code = modbus_cmd["functioncode"]
-            start_address = modbus_cmd["startaddress"]
-            count = modbus_cmd["count"]
-
-            for device in self.devices:
-                response = device.get_response(
-                    device_address, function_code, start_address, count
-                )
-                if response:
-                    self.mqtt.publish(
-                        f"tele/{self.EUI}/ModbusReceived", json.dumps(response)
-                    )
-                    return response
-        return {}
+    def cmd(self, command_str, mute: bool = False):
+        self.cmd_logger.debug(f"Executing Tasmota command: {command_str}")
+        try:
+            command_name, command_payload = command_str.split(' ', 1)
+            if command_name in self.commands:
+                handler = self.commands[command_name]
+                return handler(command_payload)
+        except ValueError:
+            return {"error": "Invalid command format"}
+        return {"error": "Unknown command"}
 
     def memory(self, key: str = None):
         mem_stats = {
-            "iram_free": 41,
-            "frag": 51,
-            "program_free": 1856,
-            "flash": 4096,
-            "heap_free": 226,
-            "program": 1679,
+            'iram_free': 41,
+            'frag': 51,
+            'program_free': 1856,
+            'flash': 4096,
+            'heap_free': 226,
+            'program': 1679
         }
         if key:
             return mem_stats.get(key)
@@ -82,7 +85,7 @@ class TasmotaAdapter:
     def add_rule(self, trigger: str, f, id: any = None):
         if trigger not in self.rules:
             self.rules[trigger] = []
-        self.rules[trigger].append({"function": f, "id": id})
+        self.rules[trigger].append({'function': f, 'id': id})
         self.logger.debug(f"Added rule with trigger: {trigger}")
 
     def remove_rule(self, trigger: str, id: any = None):
@@ -91,9 +94,7 @@ class TasmotaAdapter:
                 del self.rules[trigger]
                 self.logger.debug(f"Removed all rules with trigger: {trigger}")
             else:
-                self.rules[trigger] = [
-                    rule for rule in self.rules[trigger] if rule["id"] != id
-                ]
+                self.rules[trigger] = [rule for rule in self.rules[trigger] if rule['id'] != id]
                 if not self.rules[trigger]:
                     del self.rules[trigger]
                 self.logger.debug(f"Removed rule with trigger: {trigger} and id: {id}")
@@ -115,20 +116,18 @@ class TasmotaAdapter:
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-
+            
             if not filename:
                 filename = os.path.basename(url)
-
-            filepath = os.path.join("filesystem", filename)
-
-            with open(filepath, "wb") as f:
+            
+            filepath = os.path.join('filesystem', filename)
+            
+            with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-
+            
             file_size = os.path.getsize(filepath)
-            self.logger.debug(
-                f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes"
-            )
+            self.logger.debug(f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes")
             return file_size
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch URL: {url} with error: {e}")
@@ -153,29 +152,28 @@ class TasmotaAdapter:
     def stop(self):
         self.logger.debug("Stopping TasmotaAdapter")
         for driver in self.drivers:
-            if hasattr(driver, "save_before_restart"):
+            if hasattr(driver, 'save_before_restart'):
                 driver.save_before_restart()
         self.running = False
 
     def run_periodic_callbacks(self):
         if self.running:
             for driver in self.drivers:
-                if hasattr(driver, "every_50ms"):
+                if hasattr(driver, 'every_50ms'):
                     driver.every_50ms()
-                if hasattr(driver, "every_100ms"):
+                if hasattr(driver, 'every_100ms'):
                     driver.every_100ms()
-                if hasattr(driver, "every_250ms"):
+                if hasattr(driver, 'every_250ms'):
                     driver.every_250ms()
             self.set_timer(50, self.run_periodic_callbacks)
             for driver in self.drivers:
-                if hasattr(driver, "every_second"):
+                if hasattr(driver, 'every_second'):
                     driver.every_second()
 
     def button_pressed(self):
         for driver in self.drivers:
-            if hasattr(driver, "button_pressed"):
+            if hasattr(driver, 'button_pressed'):
                 driver.button_pressed()
-
 
 # Usage example
 if __name__ == "__main__":

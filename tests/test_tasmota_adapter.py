@@ -1,5 +1,3 @@
-# test_tasmota_adapter.py
-
 import unittest
 from unittest.mock import patch, MagicMock
 import os
@@ -7,6 +5,7 @@ import shutil
 from adapters.tasmota_adapter import TasmotaAdapter
 from adapters.mqtt_adapter import MQTTAdapter
 from adapters.modbus_device import ModbusDevice
+import time
 
 class TestTasmotaAdapter(unittest.TestCase):
     def setUp(self):
@@ -17,7 +16,7 @@ class TestTasmotaAdapter(unittest.TestCase):
         })
         self.tasmota.add_device(self.device)
         self.received_messages = []
-        self.mqtt.subscribe(f"tele/EUI53EF3GD/ModbusReceived", self.on_message)
+        self.mqtt.subscribe(f"tele/EUI53EF3GD/RESULT", self.on_message)
 
         # Create filesystem directory if it doesn't exist
         if not os.path.exists('filesystem'):
@@ -33,43 +32,33 @@ class TestTasmotaAdapter(unittest.TestCase):
 
     def test_set_device_working(self):
         self.device.set_working(False)
-        command = {
-            "ModBusSend": {
-                "deviceaddress": 2,
-                "functioncode": 4,
-                "startaddress": 33049,
-                "count": 1
-            }
-        }
+        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
 
-        self.mqtt.publish(f"cmnd/EUI53EF3GD/ModbusSend", command)
-
-        self.assertEqual(len(self.received_messages), 0)
+        self.tasmota.cmd(command)
+        self.assertEqual(len(self.received_messages), 1)
+        topic, message = self.received_messages[0]
+        self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
+        self.assertIn("ModbusSend", message)
 
     def test_error_rate(self):
         error_rate = 0.5
         self.device.set_error_rate(error_rate)
-        command = {
-            "ModBusSend": {
-                "deviceaddress": 2,
-                "functioncode": 4,
-                "startaddress": 33049,
-                "count": 1
-            }
-        }
+        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
 
         success_count = 0
         attempts = 1000
 
         def on_message(topic, message):
             nonlocal success_count
-            if topic == f"tele/{self.tasmota.EUI}/ModbusReceived":
-                success_count += 1
+            if topic == f"tele/{self.tasmota.EUI}/RESULT":
+                if "ModbusReceived" in message:
+                    success_count += 1
 
-        self.mqtt.subscribe(f"tele/{self.tasmota.EUI}/ModbusReceived", on_message)
+        self.mqtt.subscribe(f"tele/{self.tasmota.EUI}/RESULT", on_message)
 
         for _ in range(attempts):
             self.tasmota.cmd(command)
+            time.sleep(0.001)  # Slight delay to avoid overwhelming the system
 
         observed_error_rate = 1 - (success_count / attempts)
         self.assertAlmostEqual(observed_error_rate, error_rate, delta=0.05)
@@ -142,6 +131,28 @@ class TestTasmotaAdapter(unittest.TestCase):
         payload = '{"rule": "test"}'
         handled = self.tasmota.publish_rule(payload)
         self.assertTrue(handled)
+
+    def test_modbus_send(self):
+        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+
+        self.tasmota.cmd(command)
+        time.sleep(0.2)  # Wait for the delayed response
+        self.assertTrue(len(self.received_messages) > 1)
+        topic, message = self.received_messages[1]
+        self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
+        self.assertIn("ModbusReceived", message)
+
+    def test_modbus_set_baudrate(self):
+        command = 'ModBusSetBaudrate 19200'
+
+        response = self.tasmota.cmd(command)
+        self.assertEqual(response, {"Baudrate": 19200})
+
+    def test_modbus_set_config(self):
+        command = 'ModBusSetConfig 3'
+
+        response = self.tasmota.cmd(command)
+        self.assertEqual(response, {"SerialConfig": 3})
 
 if __name__ == '__main__':
     unittest.main()

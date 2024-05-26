@@ -1,5 +1,6 @@
 import re
 import fnmatch
+import logging
 
 class MQTTAdapter:
     def __init__(self):
