@@ -7,6 +7,8 @@ def main():
 
 
     # Start each TasmotaAdapter instance
+    tasmota.persist.zero()
+    tasmota.persist.save()
     tasmota.start()
     sleep(10)
     tasmota.stop()

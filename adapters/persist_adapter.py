@@ -52,7 +52,7 @@ class PersistAdapter:
             super().__setattr__(key, value)
         else:
             self.data[key] = value
-        self.save()
+            self.save()
 
     def __getattr__(self, key):
         if key in ("filename", "data"):

@@ -3,9 +3,9 @@ import os
 from adapters.persist_adapter import PersistAdapter
 
 class TestPersist(unittest.TestCase):
-    
+
     def setUp(self):
-        self.filename = "_persist_test.json"
+        self.filename = "./_persist_test.json"
         self.persist = PersistAdapter(self.filename)
         self.persist.zero()
         self.persist.save()
