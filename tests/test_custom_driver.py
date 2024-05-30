@@ -43,7 +43,7 @@ class TestCustomDriver(unittest.TestCase):
         topic = "test/topic"
         message = "test message"
         self.tasmota.mqtt.publish(topic, message)
-        time.sleep(1)  # Ensure the message is processed
+        time.sleep(0.1)  # Ensure the message is processed
         self.assertIn((topic, message), self.driver.mqtt_messages, "Driver's mqtt_data should have received the message")
 
     def test_save_before_restart(self):
