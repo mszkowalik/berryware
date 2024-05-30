@@ -5,6 +5,7 @@ import random
 import requests
 import logging
 from .mqtt_adapter import MQTTAdapter
+from .persist_adapter import PersistAdapter
 from .modules.modbus_bridge import ModbusBridge
 import importlib.util
 
@@ -13,6 +14,7 @@ class TasmotaAdapter:
         self.EUI = EUI
         self.devices = []
         self.mqtt = MQTTAdapter()
+        self.persist = PersistAdapter()
         self.heap = 1024 * 64  # Example heap size
         self.rules = {}
         self.drivers = []
@@ -184,6 +186,7 @@ class TasmotaAdapter:
             if hasattr(driver, 'save_before_restart'):
                 driver.save_before_restart()
         self.running = False
+        self.persist.save()
 
     def run_periodic_callbacks(self):
         if not self.running:
@@ -230,7 +233,7 @@ class TasmotaAdapter:
             with open(autoexec_path, "rb") as source_file:
                 code = compile(source_file.read(), autoexec_path, 'exec')
                 # Execute the code with the required context
-                exec(code, {'tasmota': self, 'mqtt': self.mqtt})
+                exec(code, {'tasmota': self, 'mqtt': self.mqtt, 'persist': self.persist})
 
     def start(self, autoexec_path=None):
         self.running = True
