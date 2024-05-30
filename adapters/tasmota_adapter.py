@@ -21,6 +21,7 @@ class TasmotaAdapter:
         self.cmd_logger.setLevel(logging.DEBUG)
         self.running = False
         self.commands = {}
+        self.current_command = None
 
         # Create the filesystem directory if it doesn't exist
         if not os.path.exists('filesystem'):
@@ -61,16 +62,46 @@ class TasmotaAdapter:
 
     def cmd(self, command_str, mute: bool = False):
         self.cmd_logger.debug(f"Executing Tasmota command: {command_str}")
+        response = None
         try:
             command_name, command_payload = command_str.split(' ', 1)
             if command_name in self.commands:
+                self.current_command = command_name
                 handler = self.commands[command_name]
                 result = handler(command_payload)
-                if not mute:
-                    return result
-        except ValueError:
-            return {"error": "Invalid command format"}
-        return {"error": "Unknown command"}
+                if not mute and result != None:
+                    result_str = ""
+                    if isinstance(result, dict):
+                        result_str = json.dumps(result)
+                    else:
+                        result_str = result
+                    response = self.resp_cmnd(result_str)
+        except Exception as e:
+            self.logger.error(f"Error executing command {command_str}: {e}")
+
+        self.current_command = None
+        return response
+
+    def resp_cmnd(self, message: str):
+        """Send a custom JSON message as a command response."""
+        response = {self.current_command: message} if self.current_command else {"Command": "Unknown"}
+        self.publish_result(response, 'RESULT', prefix='stat')
+        return response
+
+    def resp_cmnd_done(self):
+        """Report command as Done."""
+        response = "Done"
+        self.resp_cmnd(json.dumps(response))
+
+    def resp_cmnd_error(self):
+        """Report command as Error."""
+        response = "Error"
+        self.resp_cmnd(json.dumps(response))
+
+    def resp_cmnd_failed(self):
+        """Report command as Failed."""
+        response = "Failed"
+        self.resp_cmnd(json.dumps(response))
 
     def memory(self, key: str = None):
         mem_stats = {

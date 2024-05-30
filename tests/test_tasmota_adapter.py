@@ -32,10 +32,11 @@ class TestTasmotaAdapter(unittest.TestCase):
 
     def test_set_device_working(self):
         self.device.set_working(False)
-        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+        command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
 
         self.tasmota.cmd(command)
         self.assertEqual(len(self.received_messages), 1)
+        print(self.received_messages)
         topic, message = self.received_messages[-1]
         self.assertEqual(topic, f"stat/{self.tasmota.EUI}/RESULT")
         self.assertIn("ModbusSend", message)
@@ -43,7 +44,7 @@ class TestTasmotaAdapter(unittest.TestCase):
     def test_error_rate(self):
         error_rate = 0.5
         self.device.set_error_rate(error_rate)
-        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+        command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
 
         success_count = 0
         attempts = 1000
@@ -133,7 +134,7 @@ class TestTasmotaAdapter(unittest.TestCase):
         self.assertTrue(handled)
 
     def test_modbus_send(self):
-        command = 'ModBusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+        command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
 
         self.tasmota.cmd(command)
         time.sleep(0.2)  # Wait for the delayed response
@@ -144,16 +145,16 @@ class TestTasmotaAdapter(unittest.TestCase):
         self.assertIn("ModbusReceived", message)
 
     def test_modbus_set_baudrate(self):
-        command = 'ModBusSetBaudrate 19200'
+        command = 'ModbusBaudrate 9600'
 
         response = self.tasmota.cmd(command)
-        self.assertEqual(response, {"Baudrate": 19200})
+        self.assertEqual(response, {"ModbusBaudrate": 9600})
 
     def test_modbus_set_config(self):
-        command = 'ModBusSetConfig 3'
+        command = 'ModbusConfig 3'
 
         response = self.tasmota.cmd(command)
-        self.assertEqual(response, {"SerialConfig": 3})
+        self.assertEqual(response, {"ModbusConfig": 3})
 
 if __name__ == '__main__':
     unittest.main()
