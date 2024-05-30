@@ -7,7 +7,10 @@ import logging
 from .mqtt_adapter import MQTTAdapter
 from .persist_adapter import PersistAdapter
 from .modules.modbus_bridge import ModbusBridge
+from .file_redirect import custom_open
+from .json_wrapper import JSONWrapper as custom_json
 import importlib.util
+
 
 class TasmotaAdapter:
     def __init__(self, EUI):
@@ -19,27 +22,25 @@ class TasmotaAdapter:
         self.rules = {}
         self.drivers = []
         self.logger = logging.getLogger(self.__class__.__name__)
-        self.cmd_logger = logging.getLogger('command_line')
+        self.cmd_logger = logging.getLogger("command_line")
         self.cmd_logger.setLevel(logging.DEBUG)
         self.running = False
         self.commands = {}
         self.current_command = None
 
         # Create the filesystem directory if it doesn't exist
-        if not os.path.exists('filesystem'):
-            os.makedirs('filesystem')
+        if not os.path.exists("./filesystem"):
+            os.makedirs("./filesystem")
 
         # Subscribe to all MQTT messages
-        self.mqtt.subscribe('#', self.handle_mqtt_message)
+        self.mqtt.subscribe("#", self.handle_mqtt_message)
 
         # Initialize command modules
-        self.command_modules = {
-            "ModbusBridge": ModbusBridge(self)
-        }
+        self.command_modules = {"ModbusBridge": ModbusBridge(self)}
 
     def handle_mqtt_message(self, topic, message):
         for driver in self.drivers:
-            if hasattr(driver, 'mqtt_data'):
+            if hasattr(driver, "mqtt_data"):
                 driver.mqtt_data(topic, 0, message, len(message))
 
     def register_command(self, command_name, handler):
@@ -52,7 +53,7 @@ class TasmotaAdapter:
     def get_free_heap(self):
         return self.heap
 
-    def publish_result(self, result_dict: dict, subtopic: str, prefix: str = 'tele'):
+    def publish_result(self, result_dict: dict, subtopic: str, prefix: str = "tele"):
         payload = json.dumps(result_dict)
         topic = f"{prefix}/{self.EUI}/{subtopic}"
         self.mqtt.publish(topic, payload)
@@ -66,7 +67,7 @@ class TasmotaAdapter:
         self.cmd_logger.debug(f"Executing Tasmota command: {command_str}")
         response = None
         try:
-            command_name, command_payload = command_str.split(' ', 1)
+            command_name, command_payload = command_str.split(" ", 1)
             if command_name in self.commands:
                 self.current_command = command_name
                 handler = self.commands[command_name]
@@ -86,8 +87,12 @@ class TasmotaAdapter:
 
     def resp_cmnd(self, message: str):
         """Send a custom JSON message as a command response."""
-        response = {self.current_command: message} if self.current_command else {"Command": "Unknown"}
-        self.publish_result(response, 'RESULT', prefix='stat')
+        response = (
+            {self.current_command: message}
+            if self.current_command
+            else {"Command": "Unknown"}
+        )
+        self.publish_result(response, "RESULT", prefix="stat")
         return response
 
     def resp_cmnd_done(self):
@@ -107,12 +112,12 @@ class TasmotaAdapter:
 
     def memory(self, key: str = None):
         mem_stats = {
-            'iram_free': 41,
-            'frag': 51,
-            'program_free': 1856,
-            'flash': 4096,
-            'heap_free': 226,
-            'program': 1679
+            "iram_free": 41,
+            "frag": 51,
+            "program_free": 1856,
+            "flash": 4096,
+            "heap_free": 226,
+            "program": 1679,
         }
         if key:
             return mem_stats.get(key)
@@ -121,7 +126,7 @@ class TasmotaAdapter:
     def add_rule(self, trigger: str, f, id: any = None):
         if trigger not in self.rules:
             self.rules[trigger] = []
-        self.rules[trigger].append({'function': f, 'id': id})
+        self.rules[trigger].append({"function": f, "id": id})
         self.logger.debug(f"Added rule with trigger: {trigger}")
 
     def remove_rule(self, trigger: str, id: any = None):
@@ -130,7 +135,9 @@ class TasmotaAdapter:
                 del self.rules[trigger]
                 self.logger.debug(f"Removed all rules with trigger: {trigger}")
             else:
-                self.rules[trigger] = [rule for rule in self.rules[trigger] if rule['id'] != id]
+                self.rules[trigger] = [
+                    rule for rule in self.rules[trigger] if rule["id"] != id
+                ]
                 if not self.rules[trigger]:
                     del self.rules[trigger]
                 self.logger.debug(f"Removed rule with trigger: {trigger} and id: {id}")
@@ -152,18 +159,20 @@ class TasmotaAdapter:
         try:
             response = requests.get(url, stream=True)
             response.raise_for_status()
-            
+
             if not filename:
                 filename = os.path.basename(url)
-            
-            filepath = os.path.join('filesystem', filename)
-            
-            with open(filepath, 'wb') as f:
+
+            filepath = os.path.join("filesystem", filename)
+
+            with open(filepath, "wb") as f:
                 for chunk in response.iter_content(chunk_size=8192):
                     f.write(chunk)
-            
+
             file_size = os.path.getsize(filepath)
-            self.logger.debug(f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes")
+            self.logger.debug(
+                f"Fetched URL: {url} and stored as {filename} with size {file_size} bytes"
+            )
             return file_size
         except requests.RequestException as e:
             self.logger.error(f"Failed to fetch URL: {url} with error: {e}")
@@ -183,7 +192,7 @@ class TasmotaAdapter:
     def stop(self):
         self.logger.debug("Stopping TasmotaAdapter")
         for driver in self.drivers:
-            if hasattr(driver, 'save_before_restart'):
+            if hasattr(driver, "save_before_restart"):
                 driver.save_before_restart()
         self.running = False
         self.persist.save()
@@ -194,27 +203,27 @@ class TasmotaAdapter:
 
         def every_50ms():
             for driver in self.drivers:
-                if hasattr(driver, 'every_50ms'):
+                if hasattr(driver, "every_50ms"):
                     driver.every_50ms()
-            self.set_timer(50,every_50ms)
+            self.set_timer(50, every_50ms)
 
         def every_100ms():
             for driver in self.drivers:
-                if hasattr(driver, 'every_100ms'):
+                if hasattr(driver, "every_100ms"):
                     driver.every_100ms()
-            self.set_timer(100,every_100ms)
+            self.set_timer(100, every_100ms)
 
         def every_250ms():
             for driver in self.drivers:
-                if hasattr(driver, 'every_250ms'):
+                if hasattr(driver, "every_250ms"):
                     driver.every_250ms()
-            self.set_timer(250,every_250ms)
+            self.set_timer(250, every_250ms)
 
         def every_second():
             for driver in self.drivers:
-                if hasattr(driver, 'every_second'):
+                if hasattr(driver, "every_second"):
                     driver.every_second()
-            self.set_timer(1000,every_second)
+            self.set_timer(1000, every_second)
 
         every_50ms()
         every_100ms()
@@ -223,23 +232,35 @@ class TasmotaAdapter:
 
     def button_pressed(self):
         for driver in self.drivers:
-            if hasattr(driver, 'button_pressed'):
+            if hasattr(driver, "button_pressed"):
                 driver.button_pressed()
 
     def run_autoexec(self, autoexec_path=None):
         if autoexec_path is None:
-            autoexec_path = os.path.join(os.path.dirname(__file__), '..', 'autoexec', 'autoexec.py')
+            autoexec_path = os.path.join(
+                os.path.dirname(__file__), "..", "autoexec", "autoexec.py"
+            )
         if os.path.exists(autoexec_path):
             with open(autoexec_path, "rb") as source_file:
-                code = compile(source_file.read(), autoexec_path, 'exec')
+                code = compile(source_file.read(), autoexec_path, "exec")
                 # Execute the code with the required context
-                exec(code, {'tasmota': self, 'mqtt': self.mqtt, 'persist': self.persist})
+                exec(
+                    code,
+                    {
+                        "tasmota": self,
+                        "mqtt": self.mqtt,
+                        "persist": self.persist,
+                        "open": custom_open,
+                        "json": custom_json,
+                    },
+                )
 
     def start(self, autoexec_path=None):
         self.running = True
         self.logger.debug("Starting TasmotaAdapter")
         self.run_periodic_callbacks()
         self.run_autoexec(autoexec_path=autoexec_path)
+
 
 # Usage example
 if __name__ == "__main__":
