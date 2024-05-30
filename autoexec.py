@@ -1,5 +1,5 @@
 ## PYTHON SPECIFIC
-from adapters import tasmota, mqtt
+from adapters import tasmota, mqtt, persist
 ## PYTHON SPECIFIC
 
 class Dongle:

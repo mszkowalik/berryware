@@ -1,24 +1,19 @@
 import unittest
 import os
-from adapters.persist import Persist
+from adapters.persist_adapter import PersistAdapter
 
 class TestPersist(unittest.TestCase):
     
-    @classmethod
-    def setUpClass(cls):
-        cls.filename = "_persist_test.json"
-        Persist._instance = None  # Resetting the singleton instance for testing
-        cls.persist = Persist(cls.filename)
-
-    @classmethod
-    def tearDownClass(cls):
-        # Remove the test file after all tests
-        if os.path.exists(cls.filename):
-            os.remove(cls.filename)
-
     def setUp(self):
+        self.filename = "_persist_test.json"
+        self.persist = PersistAdapter(self.filename)
         self.persist.zero()
         self.persist.save()
+
+    def tearDown(self):
+        # Remove the test file after each test
+        if os.path.exists(self.filename):
+            os.remove(self.filename)
 
     def test_set_and_get_attribute(self):
         self.persist.a = 1
@@ -28,7 +23,7 @@ class TestPersist(unittest.TestCase):
         self.persist.a = 1
         self.persist.save()
 
-        new_persist = Persist(self.filename)
+        new_persist = PersistAdapter(self.filename)
         self.assertEqual(new_persist.a, 1)
 
     def test_has_key(self):
@@ -63,11 +58,6 @@ class TestPersist(unittest.TestCase):
         self.persist.zero()
         self.assertIsNone(self.persist.a)
         self.assertIsNone(self.persist.b)
-
-    def test_singleton(self):
-        another_persist = Persist(self.filename)
-        another_persist.a = 10
-        self.assertEqual(self.persist.a, 10)
 
 if __name__ == '__main__':
     unittest.main()

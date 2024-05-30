@@ -1,10 +1,7 @@
 import json
 import os
-from .singleton import singleton
 
-
-@singleton
-class Persist:
+class PersistAdapter:
     def __init__(self, filename=None):
         if filename is None:
             base_dir = os.path.dirname(os.path.abspath(__file__))
@@ -16,7 +13,7 @@ class Persist:
 
     def _ensure_directory_exists(self):
         directory = os.path.dirname(self.filename)
-        if not os.path.exists(directory):
+        if directory and not os.path.exists(directory):
             os.makedirs(directory)
 
     def _load(self):
@@ -64,6 +61,3 @@ class Persist:
 
     def __str__(self):
         return str(self.data)
-
-
-persist = Persist()
