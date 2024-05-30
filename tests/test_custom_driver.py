@@ -27,7 +27,7 @@ class TestCustomDriver(unittest.TestCase):
 
     def test_run_custom_driver(self):
         # Run TasmotaAdapter for a specified duration and simulate device operations
-        self.run_autoexec_for_duration(5)  # Run for 5 seconds
+        self.run_autoexec_for_duration(1.1)  # Run for 1 second
 
         # Check that the driver's methods were called
         self.assertTrue(self.driver.counter_50ms > 0, "Driver's every_50ms should have been called")

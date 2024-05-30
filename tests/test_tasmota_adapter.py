@@ -59,7 +59,7 @@ class TestTasmotaAdapter(unittest.TestCase):
 
         for _ in range(attempts):
             self.tasmota.cmd(command)
-            time.sleep(0.001)  # Slight delay to avoid overwhelming the system
+            time.sleep(0.002)  # Slight delay to avoid overwhelming the system
 
         observed_error_rate = 1 - (success_count / attempts)
         self.assertAlmostEqual(observed_error_rate, error_rate, delta=0.05)

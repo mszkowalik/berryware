@@ -178,12 +178,6 @@ class TasmotaAdapter:
 
         timer_callback()
 
-    def start(self):
-        self.running = True
-        self.logger.debug("Starting TasmotaAdapter")
-        self.run_periodic_callbacks()
-        self.run_autoexec()
-
     def stop(self):
         self.logger.debug("Stopping TasmotaAdapter")
         for driver in self.drivers:
@@ -192,31 +186,57 @@ class TasmotaAdapter:
         self.running = False
 
     def run_periodic_callbacks(self):
-        if self.running:
+        if not self.running:
+            return
+
+        def every_50ms():
             for driver in self.drivers:
                 if hasattr(driver, 'every_50ms'):
                     driver.every_50ms()
+            self.set_timer(50,every_50ms)
+
+        def every_100ms():
+            for driver in self.drivers:
                 if hasattr(driver, 'every_100ms'):
                     driver.every_100ms()
+            self.set_timer(100,every_100ms)
+
+        def every_250ms():
+            for driver in self.drivers:
                 if hasattr(driver, 'every_250ms'):
                     driver.every_250ms()
-            self.set_timer(50, self.run_periodic_callbacks)
+            self.set_timer(250,every_250ms)
+
+        def every_second():
             for driver in self.drivers:
                 if hasattr(driver, 'every_second'):
                     driver.every_second()
+            self.set_timer(1000,every_second)
+
+        every_50ms()
+        every_100ms()
+        every_250ms()
+        every_second()
 
     def button_pressed(self):
         for driver in self.drivers:
             if hasattr(driver, 'button_pressed'):
                 driver.button_pressed()
 
-    def run_autoexec(self):
-        autoexec_path = os.path.join(os.path.dirname(__file__), '..', 'autoexec', 'autoexec.py')
+    def run_autoexec(self, autoexec_path=None):
+        if autoexec_path is None:
+            autoexec_path = os.path.join(os.path.dirname(__file__), '..', 'autoexec', 'autoexec.py')
         if os.path.exists(autoexec_path):
             with open(autoexec_path, "rb") as source_file:
                 code = compile(source_file.read(), autoexec_path, 'exec')
                 # Execute the code with the required context
                 exec(code, {'tasmota': self, 'mqtt': self.mqtt})
+
+    def start(self, autoexec_path=None):
+        self.running = True
+        self.logger.debug("Starting TasmotaAdapter")
+        self.run_periodic_callbacks()
+        self.run_autoexec(autoexec_path=autoexec_path)
 
 # Usage example
 if __name__ == "__main__":
