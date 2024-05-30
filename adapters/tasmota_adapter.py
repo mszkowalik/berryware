@@ -6,6 +6,7 @@ import requests
 import logging
 from .mqtt_adapter import MQTTAdapter
 from .modules.modbus_bridge import ModbusBridge
+import importlib.util
 
 class TasmotaAdapter:
     def __init__(self, EUI):
@@ -19,8 +20,6 @@ class TasmotaAdapter:
         self.cmd_logger = logging.getLogger('command_line')
         self.cmd_logger.setLevel(logging.DEBUG)
         self.running = False
-        self.baudrate = 9600
-        self.serial_config = 3  # Default to 8N1
         self.commands = {}
 
         # Create the filesystem directory if it doesn't exist
@@ -72,7 +71,6 @@ class TasmotaAdapter:
         except ValueError:
             return {"error": "Invalid command format"}
         return {"error": "Unknown command"}
-
 
     def memory(self, key: str = None):
         mem_stats = {
@@ -153,6 +151,7 @@ class TasmotaAdapter:
         self.running = True
         self.logger.debug("Starting TasmotaAdapter")
         self.run_periodic_callbacks()
+        self.run_autoexec()
 
     def stop(self):
         self.logger.debug("Stopping TasmotaAdapter")
@@ -180,7 +179,15 @@ class TasmotaAdapter:
             if hasattr(driver, 'button_pressed'):
                 driver.button_pressed()
 
+    def run_autoexec(self):
+        autoexec_path = os.path.join(os.path.dirname(__file__), '..', 'autoexec', 'autoexec.py')
+        if os.path.exists(autoexec_path):
+            with open(autoexec_path, "rb") as source_file:
+                code = compile(source_file.read(), autoexec_path, 'exec')
+                # Execute the code with the required context
+                exec(code, {'tasmota': self, 'mqtt': self.mqtt})
+
 # Usage example
 if __name__ == "__main__":
     tasmota_adapter = TasmotaAdapter("EUI53EF3GD")
-    # Add your custom driver and other setup here
+    tasmota_adapter.start()
