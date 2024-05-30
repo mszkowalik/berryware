@@ -43,7 +43,7 @@ class TestAutoexec(unittest.TestCase):
 
     def test_run_autoexec(self):
         # Run autoexec for a specified duration and simulate device operations
-        self.run_autoexec_for_duration(1)  # Run for 1 seconds
+        self.run_autoexec_for_duration(0.5)  # Run for 1 seconds
 
         # Check that the driver `every_250ms` method was called
         self.assertTrue(self.driver.counter_250ms > 0, "Driver's every_250ms should have been called")

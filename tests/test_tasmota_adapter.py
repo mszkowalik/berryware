@@ -36,7 +36,6 @@ class TestTasmotaAdapter(unittest.TestCase):
 
         self.tasmota.cmd(command)
         self.assertEqual(len(self.received_messages), 1)
-        print(self.received_messages)
         topic, message = self.received_messages[-1]
         self.assertEqual(topic, f"stat/{self.tasmota.EUI}/RESULT")
         self.assertIn("ModbusSend", message)
@@ -59,8 +58,8 @@ class TestTasmotaAdapter(unittest.TestCase):
 
         for _ in range(attempts):
             self.tasmota.cmd(command)
-            time.sleep(0.002)  # Slight delay to avoid overwhelming the system
 
+        time.sleep(0.15) # Wait for all modbus responses (max 150ms)
         observed_error_rate = 1 - (success_count / attempts)
         self.assertAlmostEqual(observed_error_rate, error_rate, delta=0.05)
 
@@ -139,7 +138,6 @@ class TestTasmotaAdapter(unittest.TestCase):
         self.tasmota.cmd(command)
         time.sleep(0.2)  # Wait for the delayed response
         self.assertTrue(len(self.received_messages) > 1)
-        print(self.received_messages)
         topic, message = self.received_messages[-1] ## last message
         self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
         self.assertIn("ModbusReceived", message)
