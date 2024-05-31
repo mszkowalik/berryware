@@ -7,9 +7,31 @@ import logging
 from .mqtt_adapter import MQTTAdapter
 from .persist_adapter import PersistAdapter
 from .modules.modbus_bridge import ModbusBridge
+
 from .file_redirect import custom_open
-from .json_wrapper import JSONWrapper as custom_json
-import importlib.util
+from .basic_lib import (
+    JSONModule as custom_json,
+    MathModule as custom_math,
+    TimeModule as custom_time,
+    List,
+    Map,
+    Range,
+    Bytes,
+    custom_print,
+    classname,
+    custom_input,
+    custom_str,
+    number,
+    custom_int,
+    real,
+    custom_bool,
+    custom_type,
+    custom_size,
+    custom_super ,
+    custom_assert,
+    custom_compile
+    )
+
 
 
 class TasmotaAdapter:
@@ -244,16 +266,32 @@ class TasmotaAdapter:
             with open(autoexec_path, "rb") as source_file:
                 code = compile(source_file.read(), autoexec_path, "exec")
                 # Execute the code with the required context
-                exec(
-                    code,
-                    {
-                        "tasmota": self,
-                        "mqtt": self.mqtt,
-                        "persist": self.persist,
-                        "open": custom_open,
-                        "json": custom_json,
-                    },
-                )
+                exec(code, {
+                    'tasmota': self,
+                    'mqtt': self.mqtt,
+                    'persist': self.persist,
+                    'open': custom_open,
+                    'json': custom_json,
+                    'math': custom_math,
+                    'time': custom_time,
+                    'List': List,
+                    'Map': Map,
+                    'Range': Range,
+                    'Bytes': Bytes,
+                    'print': custom_print,
+                    'classname': classname,
+                    'input': custom_input,
+                    'str': custom_str,
+                    'number': number,
+                    'int': custom_int,
+                    'real': real,
+                    'bool': custom_bool,
+                    'type': custom_type,
+                    'size': custom_size,
+                    'super': custom_super,
+                    'assert_': custom_assert,
+                    'compile': custom_compile
+                })
 
     def start(self, autoexec_path=None):
         self.running = True
