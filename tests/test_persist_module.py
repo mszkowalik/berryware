@@ -2,6 +2,7 @@ import unittest
 import os
 from adapters.persist_adapter import PersistAdapter
 
+
 class TestPersist(unittest.TestCase):
 
     def setUp(self):
@@ -59,5 +60,6 @@ class TestPersist(unittest.TestCase):
         self.assertIsNone(self.persist.a)
         self.assertIsNone(self.persist.b)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

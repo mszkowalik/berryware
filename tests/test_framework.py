@@ -4,13 +4,14 @@ import time
 import os
 from adapters.tasmota_adapter import TasmotaAdapter
 
+
 class TestAutoexec(unittest.TestCase):
     def setUp(self):
         # Create an instance of TasmotaAdapter with a unique EUI
         self.tasmota = TasmotaAdapter("EUI_TEST")
 
         # Path to the test autoexec file
-        self.autoexec_path = os.path.join(os.path.dirname(__file__), 'test_autoexec.py')
+        self.autoexec_path = os.path.join(os.path.dirname(__file__), "test_autoexec.py")
 
         # Create a custom driver for testing
         class CustomDriver:
@@ -46,7 +47,9 @@ class TestAutoexec(unittest.TestCase):
         self.run_autoexec_for_duration(0.5)  # Run for 1 seconds
 
         # Check that the driver `every_250ms` method was called
-        self.assertTrue(self.driver.counter_250ms > 0, "Driver's every_250ms should have been called")
+        self.assertTrue(
+            self.driver.counter_250ms > 0, "Driver's every_250ms should have been called"
+        )
 
     def tearDown(self):
         # Cleanup code after each test
@@ -54,5 +57,6 @@ class TestAutoexec(unittest.TestCase):
             print("Terminating autoexec thread")
             self.tasmota.stop()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

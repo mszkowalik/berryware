@@ -1,7 +1,6 @@
 import threading
 import json
 import os
-import random
 import requests
 import logging
 from .mqtt_adapter import MQTTAdapter
@@ -27,11 +26,10 @@ from .basic_lib import (
     custom_bool,
     custom_type,
     custom_size,
-    custom_super ,
+    custom_super,
     custom_assert,
-    custom_compile
-    )
-
+    custom_compile,
+)
 
 
 class TasmotaAdapter:
@@ -94,7 +92,7 @@ class TasmotaAdapter:
                 self.current_command = command_name
                 handler = self.commands[command_name]
                 result = handler(command_payload)
-                if not mute and result != None:
+                if not mute and result is not None:
                     result_str = ""
                     if isinstance(result, dict):
                         result_str = json.dumps(result)
@@ -110,9 +108,7 @@ class TasmotaAdapter:
     def resp_cmnd(self, message: str):
         """Send a custom JSON message as a command response."""
         response = (
-            {self.current_command: message}
-            if self.current_command
-            else {"Command": "Unknown"}
+            {self.current_command: message} if self.current_command else {"Command": "Unknown"}
         )
         self.publish_result(response, "RESULT", prefix="stat")
         return response
@@ -157,9 +153,7 @@ class TasmotaAdapter:
                 del self.rules[trigger]
                 self.logger.debug(f"Removed all rules with trigger: {trigger}")
             else:
-                self.rules[trigger] = [
-                    rule for rule in self.rules[trigger] if rule["id"] != id
-                ]
+                self.rules[trigger] = [rule for rule in self.rules[trigger] if rule["id"] != id]
                 if not self.rules[trigger]:
                     del self.rules[trigger]
                 self.logger.debug(f"Removed rule with trigger: {trigger} and id: {id}")
@@ -259,39 +253,40 @@ class TasmotaAdapter:
 
     def run_autoexec(self, autoexec_path=None):
         if autoexec_path is None:
-            autoexec_path = os.path.join(
-                os.path.dirname(__file__), "..", "autoexec", "autoexec.py"
-            )
+            autoexec_path = os.path.join(os.path.dirname(__file__), "..", "autoexec", "autoexec.py")
         if os.path.exists(autoexec_path):
             with open(autoexec_path, "rb") as source_file:
                 code = compile(source_file.read(), autoexec_path, "exec")
                 # Execute the code with the required context
-                exec(code, {
-                    'tasmota': self,
-                    'mqtt': self.mqtt,
-                    'persist': self.persist,
-                    'open': custom_open,
-                    'json': custom_json,
-                    'math': custom_math,
-                    'time': custom_time,
-                    'List': List,
-                    'Map': Map,
-                    'Range': Range,
-                    'Bytes': Bytes,
-                    'print': custom_print,
-                    'classname': classname,
-                    'input': custom_input,
-                    'str': custom_str,
-                    'number': number,
-                    'int': custom_int,
-                    'real': real,
-                    'bool': custom_bool,
-                    'type': custom_type,
-                    'size': custom_size,
-                    'super': custom_super,
-                    'assert_': custom_assert,
-                    'compile': custom_compile
-                })
+                exec(
+                    code,
+                    {
+                        "tasmota": self,
+                        "mqtt": self.mqtt,
+                        "persist": self.persist,
+                        "open": custom_open,
+                        "json": custom_json,
+                        "math": custom_math,
+                        "time": custom_time,
+                        "List": List,
+                        "Map": Map,
+                        "Range": Range,
+                        "Bytes": Bytes,
+                        "print": custom_print,
+                        "classname": classname,
+                        "input": custom_input,
+                        "str": custom_str,
+                        "number": number,
+                        "int": custom_int,
+                        "real": real,
+                        "bool": custom_bool,
+                        "type": custom_type,
+                        "size": custom_size,
+                        "super": custom_super,
+                        "assert_": custom_assert,
+                        "compile": custom_compile,
+                    },
+                )
 
     def start(self, autoexec_path=None):
         self.running = True

@@ -1,6 +1,7 @@
 import unittest
 from berry_converter import PythonToBerryConverter
 
+
 class TestPythonToBerryConverter(unittest.TestCase):
     def setUp(self):
         self.converter = PythonToBerryConverter()
@@ -86,7 +87,9 @@ var web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" 
         source_code = """
 mqtt_topic_config = f"tele/{self.EUI}/{mqtt_topic_config}"
 """
-        expected_output = """var mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
+        expected_output = (
+            """var mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
+        )
         berry_code = self.converter.convert(source_code)
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
@@ -236,7 +239,7 @@ my_list.push(1)
 """
         berry_code = self.converter.convert(source_code)
         print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())\
+        self.assertEqual(berry_code.strip(), expected_output.strip())
 
     def test_list_inside_class_append_method(self):
         source_code = """
@@ -257,5 +260,6 @@ end
         print(f"DEBUG: Berry code generated: {berry_code}")
         self.assertEqual(berry_code.strip(), expected_output.strip())
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

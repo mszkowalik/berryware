@@ -9,10 +9,12 @@ class TestDriver:
     def every_second(self):
         print("every_second called")
 
+
 def main():
     driver = TestDriver()
-    tasmota.add_driver(driver)
+    tasmota.add_driver(driver) # noqa
     print("Test Driver added to Tasmota")
+
 
 if __name__ == "__main__":
     main()

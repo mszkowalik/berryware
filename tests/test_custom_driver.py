@@ -6,6 +6,7 @@ import time
 from adapters.tasmota_adapter import TasmotaAdapter
 from custom_driver import CustomDriver
 
+
 class TestCustomDriver(unittest.TestCase):
     def setUp(self):
         # Initialize the TasmotaAdapter and register the CustomDriver
@@ -31,24 +32,41 @@ class TestCustomDriver(unittest.TestCase):
 
         # Check that the driver's methods were called
         self.assertTrue(self.driver.counter_50ms > 0, "Driver's every_50ms should have been called")
-        self.assertTrue(self.driver.counter_100ms > 0, "Driver's every_100ms should have been called")
-        self.assertTrue(self.driver.counter_250ms > 0, "Driver's every_250ms should have been called")
-        self.assertTrue(self.driver.counter_second > 0, "Driver's every_second should have been called")
+        self.assertTrue(
+            self.driver.counter_100ms > 0, "Driver's every_100ms should have been called"
+        )
+        self.assertTrue(
+            self.driver.counter_250ms > 0, "Driver's every_250ms should have been called"
+        )
+        self.assertTrue(
+            self.driver.counter_second > 0, "Driver's every_second should have been called"
+        )
 
     def test_button_pressed(self):
         self.tasmota.button_pressed()
-        self.assertEqual(self.driver.button_press_count, 1, "Driver's button_pressed should have been called once")
+        self.assertEqual(
+            self.driver.button_press_count,
+            1,
+            "Driver's button_pressed should have been called once",
+        )
 
     def test_mqtt_data(self):
         topic = "test/topic"
         message = "test message"
         self.tasmota.mqtt.publish(topic, message)
         time.sleep(0.1)  # Ensure the message is processed
-        self.assertIn((topic, message), self.driver.mqtt_messages, "Driver's mqtt_data should have received the message")
+        self.assertIn(
+            (topic, message),
+            self.driver.mqtt_messages,
+            "Driver's mqtt_data should have received the message",
+        )
 
     def test_save_before_restart(self):
         self.tasmota.stop()
-        self.assertTrue(self.driver.save_before_restart_called, "Driver's save_before_restart should have been called")
+        self.assertTrue(
+            self.driver.save_before_restart_called,
+            "Driver's save_before_restart should have been called",
+        )
 
     def tearDown(self):
         # Cleanup code after each test
@@ -56,5 +74,6 @@ class TestCustomDriver(unittest.TestCase):
             print("Terminating autoexec thread")
             self.tasmota.stop()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

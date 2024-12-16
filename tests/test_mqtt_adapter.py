@@ -1,6 +1,7 @@
 import unittest
 from adapters.mqtt_adapter import MQTTAdapter
 
+
 class TestMQTTAdapter(unittest.TestCase):
     def setUp(self):
         self.mqtt = MQTTAdapter()
@@ -68,5 +69,6 @@ class TestMQTTAdapter(unittest.TestCase):
         self.mqtt.reset()
         self.received_messages = []
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()
