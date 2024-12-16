@@ -1,14 +1,14 @@
-import unittest
+import pytest
 from berry_converter import PythonToBerryConverter
 
 
-class TestPythonToBerryConverter(unittest.TestCase):
-    def setUp(self):
-        self.converter = PythonToBerryConverter()
-        self.maxDiff = None
+@pytest.fixture
+def converter():
+    return PythonToBerryConverter()
 
-    def test_class_and_function_conversion(self):
-        source_code = """
+
+def test_class_and_function_conversion(converter):
+    source_code = """
 class TestClass:
     param1 = None
     param2 = 3
@@ -19,7 +19,7 @@ class TestClass:
     def test_method(self):
         return self.param1 + self.param2
 """
-        expected_output = """
+    expected_output = """
 class TestClass
     var param1 = nil
     var param2 = 3
@@ -31,11 +31,12 @@ class TestClass
         return self.param1 + self.param2
     end
 end"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_if_else_conversion(self):
-        source_code = """
+
+def test_if_else_conversion(converter):
+    source_code = """
 value = 0
 value2 = True
 value3 = False
@@ -46,7 +47,7 @@ elif check_data:
 else:
     default_action()
 """
-        expected_output = """
+    expected_output = """
 var value = 0
 var value2 = true
 var value3 = false
@@ -57,88 +58,94 @@ elif check_data
 else
     default_action()
 end"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_augmented_assignment_conversion(self):
-        source_code = """
+
+def test_augmented_assignment_conversion(converter):
+    source_code = """
 i = 0
 i += 1
 """
-        expected_output = """
+    expected_output = """
 var i = 0
 i += 1"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_string_formatting_conversion(self):
-        source_code = """
+
+def test_string_formatting_conversion(converter):
+    source_code = """
 sequencer = 3
 web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', sequencer + 2)
 """
-        expected_output = """
+    expected_output = """
 var sequencer = 3
 var web_msg = string.format('<h2>Monitoring Data: </h2><textarea name="message" rows="%d" cols="30" readonly>Waiting for data...</textarea>', sequencer + 2)"""
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_f_string_conversion(self):
-        source_code = """
+
+def test_f_string_conversion(converter):
+    source_code = """
 mqtt_topic_config = f"tele/{self.EUI}/{mqtt_topic_config}"
 """
-        expected_output = (
-            """var mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
-        )
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    expected_output = """var mqtt_topic_config = string.format('tele/%s/%s', self.EUI, mqtt_topic_config)"""
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_dictionary_conversion(self):
-        source_code = """
+
+def test_dictionary_conversion(converter):
+    source_code = """
 address_map = {}
 address_map = {
     "3034": {"name": 'PV-V-A', "functioncode": 4, "type": "uint16", "count": 1, "sum": 0}
 }
 """
-        expected_output = """
+    expected_output = """
 var address_map = {}
 address_map = {'3034': {'name': 'PV-V-A', 'functioncode': 4, 'type': 'uint16', 'count': 1, 'sum': 0}}"""
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_list_conversion(self):
-        source_code = """
+
+def test_list_conversion(converter):
+    source_code = """
 hems_sequencer = []
 """
-        expected_output = """var hems_sequencer = []"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    expected_output = """var hems_sequencer = []"""
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_contains_conversion(self):
-        source_code = """
+
+def test_contains_conversion(converter):
+    source_code = """
 if "mode" in msg:
     self.handle_mode()
 """
-        expected_output = """if (msg.contains('mode'))
+    expected_output = """if (msg.contains('mode'))
     self.handle_mode()
 end"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_is_not_conversion(self):
-        source_code = """
+
+def test_is_not_conversion(converter):
+    source_code = """
 if delay is not None:
     self.set_delay(delay)
 """
-        expected_output = """if delay != nil
+    expected_output = """if delay != nil
     self.set_delay(delay)
 end"""
-        berry_code = self.converter.convert(source_code)
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_exception_handling(self):
-        source_code = """
+
+def test_exception_handling(converter):
+    source_code = """
 def mqtt_data():
     return True
 
@@ -147,7 +154,7 @@ try:
 except Exception as error_msg:
     print("Wrong mqtt query: ", error_msg)
 """
-        expected_output = """
+    expected_output = """
 def mqtt_data()
     return true
 end
@@ -156,25 +163,27 @@ try
 except .. as error_msg
     print('Wrong mqtt query: ', error_msg)
 end"""
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_multiline_string_print(self):
-        source_code = """
+
+def test_multiline_string_print(converter):
+    source_code = """
 json_response = "some response"
 print('Finished collecting data:\\n', json_response)
 """
-        expected_output = """
+    expected_output = """
 var json_response = 'some response'
 print('Finished collecting data:\\n', json_response)
 """
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_function_callback_conversion(self):
-        source_code = """
+
+def test_function_callback_conversion(converter):
+    source_code = """
 class TestClass:
     interval = None
     timer = None
@@ -190,7 +199,7 @@ class TestClass:
         tasmota.set_timer(self.interval * 1000, self.start_over, self.timer)
         tasmota.set_timer(self.interval, self.start_over, self.timer)
 """
-        expected_output = """
+    expected_output = """
 class TestClass
     var interval = nil
     var timer = nil
@@ -206,49 +215,52 @@ class TestClass
         tasmota.set_timer(self.interval, /-> self.start_over(), self.timer)
     end
 end"""
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_parentheses(self):
-        source_code = """
+
+def test_parentheses(converter):
+    source_code = """
 if (self.value == self.value2):
     self.do_something()
 if self.value == self.value2:
     self.do_something()
 """
-        expected_output = """
+    expected_output = """
 if self.value == self.value2
     self.do_something()
 end
 if self.value == self.value2
     self.do_something()
 end"""
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_list_append_method(self):
-        source_code = """
+
+def test_list_append_method(converter):
+    source_code = """
 my_list:list = []
 my_list.append(1)
 """
-        expected_output = """
+    expected_output = """
 var my_list = []
 my_list.push(1)
 """
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()
 
-    def test_list_inside_class_append_method(self):
-        source_code = """
+
+def test_list_inside_class_append_method(converter):
+    source_code = """
 class TestClass:
     def __init__(self):
         self.my_list = []
         self.my_list.append(1)
 """
-        expected_output = """
+    expected_output = """
 class TestClass
     def init()
         self.my_list = []
@@ -256,10 +268,6 @@ class TestClass
     end
 end
 """
-        berry_code = self.converter.convert(source_code)
-        print(f"DEBUG: Berry code generated: {berry_code}")
-        self.assertEqual(berry_code.strip(), expected_output.strip())
-
-
-if __name__ == "__main__":
-    unittest.main()
+    berry_code = converter.convert(source_code)
+    print(f"DEBUG: Berry code generated: {berry_code}")
+    assert berry_code.strip() == expected_output.strip()

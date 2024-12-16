@@ -1,176 +1,200 @@
-import unittest
-from unittest.mock import patch, MagicMock
+import pytest
 import os
 import shutil
+import time
+import requests
 from adapters.tasmota_adapter import TasmotaAdapter
 from adapters.modbus_device import ModbusDevice
-import time
 
 
-class TestTasmotaAdapter(unittest.TestCase):
-    def setUp(self):
-        self.tasmota = TasmotaAdapter("EUI53EF3GD")
-        self.mqtt = self.tasmota.mqtt
-        self.device = ModbusDevice(
-            "TestDevice",
-            "TestManufacturer",
-            "TestPartNumber",
-            {
-                "33049": {
-                    "name": "PV-V-A",
-                    "functioncode": 4,
-                    "type": "uint16",
-                    "count": 1,
-                    "sum": 10,
-                },
+@pytest.fixture
+def tasmota_adapter():
+    tasmota = TasmotaAdapter("EUI53EF3GD")
+    mqtt = tasmota.mqtt
+    device = ModbusDevice(
+        "TestDevice",
+        "TestManufacturer",
+        "TestPartNumber",
+        {
+            "33049": {
+                "name": "PV-V-A",
+                "functioncode": 4,
+                "type": "uint16",
+                "count": 1,
+                "sum": 10,
             },
-        )
-        self.tasmota.add_device(self.device)
-        self.received_messages = []
-        self.mqtt.subscribe("#", self.on_message)
+        },
+    )
+    tasmota.add_device(device)
+    received_messages = []
 
-        # Create filesystem directory if it doesn't exist
-        if not os.path.exists("filesystem"):
-            os.makedirs("filesystem")
+    def on_message(topic, message):
+        received_messages.append((topic, message))
 
-    def tearDown(self):
-        # Clean up the filesystem directory after tests
-        if os.path.exists("filesystem"):
-            shutil.rmtree("filesystem")
+    mqtt.subscribe("#", on_message)
 
-    def on_message(self, topic, message):
-        self.received_messages.append((topic, message))
+    # Create filesystem directory if it doesn't exist
+    if not os.path.exists("filesystem"):
+        os.makedirs("filesystem")
 
-    def test_set_device_working(self):
-        self.device.set_working(False)
-        command = (
-            'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
-        )
+    yield tasmota, mqtt, device, received_messages
 
-        self.tasmota.cmd(command)
-        self.assertEqual(len(self.received_messages), 1)
-        topic, message = self.received_messages[-1]
-        self.assertEqual(topic, f"stat/{self.tasmota.EUI}/RESULT")
-        self.assertIn("ModbusSend", message)
-
-    def test_error_rate(self):
-        error_rate = 0.5
-        self.device.set_error_rate(error_rate)
-        command = (
-            'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
-        )
-
-        success_count = 0
-        attempts = 1000
-
-        def on_message(topic, message):
-            nonlocal success_count
-            if topic == f"tele/{self.tasmota.EUI}/RESULT":
-                if "ModbusReceived" in message:
-                    success_count += 1
-
-        self.mqtt.subscribe(f"tele/{self.tasmota.EUI}/RESULT", on_message)
-
-        for _ in range(attempts):
-            self.tasmota.cmd(command)
-
-        time.sleep(0.15)  # Wait for all modbus responses (max 150ms)
-        observed_error_rate = 1 - (success_count / attempts)
-        self.assertAlmostEqual(observed_error_rate, error_rate, delta=0.05)
-
-    @patch("requests.get")
-    def test_urlfetch(self, mock_get):
-        mock_response = MagicMock()
-        mock_response.iter_content = lambda chunk_size: [b"test data"]
-        mock_response.raise_for_status = lambda: None
-        mock_get.return_value = mock_response
-
-        url = "http://example.com/testfile"
-        filename = "testfile"
-        expected_file_path = os.path.join("filesystem", filename)
-
-        bytes_downloaded = self.tasmota.urlfetch(url)
-
-        self.assertEqual(bytes_downloaded, len(b"test data"))
-        self.assertTrue(os.path.exists(expected_file_path))
-
-        with open(expected_file_path, "rb") as f:
-            self.assertEqual(f.read(), b"test data")
-
-    def test_add_rule(self):
-        def dummy_rule(cmd, idx, payload, raw):
-            pass
-
-        self.tasmota.add_rule("test_trigger", dummy_rule, id="test_rule")
-        self.assertIn("test_trigger", self.tasmota.rules)
-        self.assertEqual(len(self.tasmota.rules["test_trigger"]), 1)
-        self.assertEqual(self.tasmota.rules["test_trigger"][0]["id"], "test_rule")
-
-    def test_remove_rule(self):
-        def dummy_rule(cmd, idx, payload, raw):
-            pass
-
-        self.tasmota.add_rule("test_trigger", dummy_rule, id="test_rule")
-        self.tasmota.remove_rule("test_trigger", id="test_rule")
-        self.assertNotIn("test_trigger", self.tasmota.rules)
-
-    def test_memory(self):
-        memory_stats = self.tasmota.memory()
-        self.assertIsInstance(memory_stats, dict)
-        self.assertIn("iram_free", memory_stats)
-
-        heap_free = self.tasmota.memory("heap_free")
-        self.assertEqual(heap_free, 226)
-
-    def test_gc(self):
-        allocated_bytes = self.tasmota.gc()
-        self.assertEqual(allocated_bytes, self.tasmota.heap)
-
-    def test_publish_result(self):
-        payload = '{"status": "ok"}'
-        subtopic = "status"
-        received_messages = []
-
-        def on_message(topic, message):
-            received_messages.append((topic, message))
-
-        topic = f"tele/{self.tasmota.EUI}/{subtopic}"
-
-        self.mqtt.subscribe(topic, on_message)
-        self.mqtt.publish(topic, payload)
-
-        self.assertEqual(len(received_messages), 1)
-        self.assertEqual(received_messages[0], (f"tele/{self.tasmota.EUI}/{subtopic}", payload))
-
-    def test_publish_rule(self):
-        payload = '{"rule": "test"}'
-        handled = self.tasmota.publish_rule(payload)
-        self.assertTrue(handled)
-
-    def test_modbus_send(self):
-        command = (
-            'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
-        )
-
-        self.tasmota.cmd(command)
-        time.sleep(0.2)  # Wait for the delayed response
-        self.assertTrue(len(self.received_messages) > 1)
-        topic, message = self.received_messages[-1]  # last message
-        self.assertEqual(topic, f"tele/{self.tasmota.EUI}/RESULT")
-        self.assertIn("ModbusReceived", message)
-
-    def test_modbus_set_baudrate(self):
-        command = "ModbusBaudrate 9600"
-
-        response = self.tasmota.cmd(command)
-        self.assertEqual(response, {"ModbusBaudrate": 9600})
-
-    def test_modbus_set_config(self):
-        command = "ModbusConfig 3"
-
-        response = self.tasmota.cmd(command)
-        self.assertEqual(response, {"ModbusConfig": 3})
+    # Cleanup after tests
+    if os.path.exists("filesystem"):
+        shutil.rmtree("filesystem")
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_set_device_working(tasmota_adapter):
+    tasmota, mqtt, device, received_messages = tasmota_adapter
+    device.set_working(False)
+    command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+
+    tasmota.cmd(command)
+    assert len(received_messages) == 1
+    topic, message = received_messages[-1]
+    assert topic == f"stat/{tasmota.EUI}/RESULT"
+    assert "ModbusSend" in message
+
+
+def test_error_rate(tasmota_adapter):
+    tasmota, mqtt, device, received_messages = tasmota_adapter
+    error_rate = 0.5
+    device.set_error_rate(error_rate)
+    command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+
+    success_count = 0
+    attempts = 1000
+
+    def on_message(topic, message):
+        nonlocal success_count
+        if topic == f"tele/{tasmota.EUI}/RESULT" and "ModbusReceived" in message:
+            success_count += 1
+
+    mqtt.subscribe(f"tele/{tasmota.EUI}/RESULT", on_message)
+
+    for _ in range(attempts):
+        tasmota.cmd(command)
+
+    time.sleep(0.15)  # Wait for all modbus responses
+    observed_error_rate = 1 - (success_count / attempts)
+    assert abs(observed_error_rate - error_rate) <= 0.05
+
+
+def test_urlfetch(tasmota_adapter, monkeypatch):
+    tasmota, _, _, _ = tasmota_adapter
+
+    def mock_get(url, stream=True):
+        class MockResponse:
+            def iter_content(self, chunk_size=1):
+                yield b"test data"
+
+            def raise_for_status(self):
+                pass
+
+        return MockResponse()
+
+    monkeypatch.setattr(requests, "get", mock_get)
+
+    url = "http://example.com/testfile"
+    filename = "testfile"
+    expected_file_path = os.path.join("filesystem", filename)
+
+    bytes_downloaded = tasmota.urlfetch(url)
+
+    assert bytes_downloaded == len(b"test data")
+    assert os.path.exists(expected_file_path)
+
+    with open(expected_file_path, "rb") as f:
+        assert f.read() == b"test data"
+
+
+def test_add_rule(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+
+    def dummy_rule(cmd, idx, payload, raw):
+        pass
+
+    tasmota.add_rule("test_trigger", dummy_rule, id="test_rule")
+    assert "test_trigger" in tasmota.rules
+    assert len(tasmota.rules["test_trigger"]) == 1
+    assert tasmota.rules["test_trigger"][0]["id"] == "test_rule"
+
+
+def test_remove_rule(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+
+    def dummy_rule(cmd, idx, payload, raw):
+        pass
+
+    tasmota.add_rule("test_trigger", dummy_rule, id="test_rule")
+    tasmota.remove_rule("test_trigger", id="test_rule")
+    assert "test_trigger" not in tasmota.rules
+
+
+def test_memory(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+    memory_stats = tasmota.memory()
+    assert isinstance(memory_stats, dict)
+    assert "iram_free" in memory_stats
+
+    heap_free = tasmota.memory("heap_free")
+    assert heap_free == 226
+
+
+def test_gc(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+    allocated_bytes = tasmota.gc()
+    assert allocated_bytes == tasmota.heap
+
+
+def test_publish_result(tasmota_adapter):
+    tasmota, mqtt, _, _ = tasmota_adapter
+    payload = '{"status": "ok"}'
+    subtopic = "status"
+    received_messages = []
+
+    def on_message(topic, message):
+        received_messages.append((topic, message))
+
+    topic = f"tele/{tasmota.EUI}/{subtopic}"
+
+    mqtt.subscribe(topic, on_message)
+    mqtt.publish(topic, payload)
+
+    assert len(received_messages) == 1
+    assert received_messages[0] == (topic, payload)
+
+
+def test_publish_rule(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+    payload = '{"rule": "test"}'
+    handled = tasmota.publish_rule(payload)
+    assert handled
+
+
+def test_modbus_send(tasmota_adapter):
+    tasmota, mqtt, _, received_messages = tasmota_adapter
+    command = 'ModbusSend {"deviceaddress": 2, "functioncode": 4, "startaddress": 33049, "count": 1}'
+
+    tasmota.cmd(command)
+    time.sleep(0.2)  # Wait for the delayed response
+    assert len(received_messages) > 1
+    topic, message = received_messages[-1]
+    assert topic == f"tele/{tasmota.EUI}/RESULT"
+    assert "ModbusReceived" in message
+
+
+def test_modbus_set_baudrate(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+    command = "ModbusBaudrate 9600"
+
+    response = tasmota.cmd(command)
+    assert response == {"ModbusBaudrate": 9600}
+
+
+def test_modbus_set_config(tasmota_adapter):
+    tasmota, _, _, _ = tasmota_adapter
+    command = "ModbusConfig 3"
+
+    response = tasmota.cmd(command)
+    assert response == {"ModbusConfig": 3}

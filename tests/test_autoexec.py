@@ -12,7 +12,7 @@ class TestDriver:
 
 def main():
     driver = TestDriver()
-    tasmota.add_driver(driver) # noqa
+    tasmota.add_driver(driver)  # noqa
     print("Test Driver added to Tasmota")
 
 

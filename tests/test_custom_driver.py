@@ -1,79 +1,65 @@
-# test_custom_driver.py
-
-import unittest
 import threading
 import time
+import pytest
 from adapters.tasmota_adapter import TasmotaAdapter
 from custom_driver import CustomDriver
 
 
-class TestCustomDriver(unittest.TestCase):
-    def setUp(self):
-        # Initialize the TasmotaAdapter and register the CustomDriver
-        self.tasmota = TasmotaAdapter("EUI53EF3GD")
-        self.driver = CustomDriver()
-        self.tasmota.add_driver(self.driver)
-        self.autoexec_thread = threading.Thread(target=self.run_tasmota)
-        self.autoexec_thread.daemon = True  # Allows thread to be killed when main thread exits
+@pytest.fixture
+def tasmota_driver():
+    # Initialize the TasmotaAdapter and register the CustomDriver
+    tasmota = TasmotaAdapter("EUI53EF3GD")
+    driver = CustomDriver()
+    tasmota.add_driver(driver)
+    autoexec_thread = threading.Thread(target=tasmota.start)
+    autoexec_thread.daemon = True  # Allows thread to be killed when main thread exits
 
-    def run_tasmota(self):
-        self.tasmota.start()
-
-    def run_autoexec_for_duration(self, duration):
-        self.autoexec_thread.start()
+    def run_autoexec_for_duration(duration):
+        autoexec_thread.start()
         time.sleep(duration)
         print("Stopping TasmotaAdapter after duration")
         # Stopping TasmotaAdapter
-        self.tasmota.stop()
+        tasmota.stop()
+        autoexec_thread.join()
 
-    def test_run_custom_driver(self):
-        # Run TasmotaAdapter for a specified duration and simulate device operations
-        self.run_autoexec_for_duration(1.1)  # Run for 1 second
+    yield tasmota, driver, run_autoexec_for_duration
 
-        # Check that the driver's methods were called
-        self.assertTrue(self.driver.counter_50ms > 0, "Driver's every_50ms should have been called")
-        self.assertTrue(
-            self.driver.counter_100ms > 0, "Driver's every_100ms should have been called"
-        )
-        self.assertTrue(
-            self.driver.counter_250ms > 0, "Driver's every_250ms should have been called"
-        )
-        self.assertTrue(
-            self.driver.counter_second > 0, "Driver's every_second should have been called"
-        )
-
-    def test_button_pressed(self):
-        self.tasmota.button_pressed()
-        self.assertEqual(
-            self.driver.button_press_count,
-            1,
-            "Driver's button_pressed should have been called once",
-        )
-
-    def test_mqtt_data(self):
-        topic = "test/topic"
-        message = "test message"
-        self.tasmota.mqtt.publish(topic, message)
-        time.sleep(0.1)  # Ensure the message is processed
-        self.assertIn(
-            (topic, message),
-            self.driver.mqtt_messages,
-            "Driver's mqtt_data should have received the message",
-        )
-
-    def test_save_before_restart(self):
-        self.tasmota.stop()
-        self.assertTrue(
-            self.driver.save_before_restart_called,
-            "Driver's save_before_restart should have been called",
-        )
-
-    def tearDown(self):
-        # Cleanup code after each test
-        if self.autoexec_thread.is_alive():
-            print("Terminating autoexec thread")
-            self.tasmota.stop()
+    # Cleanup after tests
+    if autoexec_thread.is_alive():
+        print("Terminating autoexec thread")
+        tasmota.stop()
+        autoexec_thread.join()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_run_custom_driver(tasmota_driver):
+    tasmota, driver, run_autoexec_for_duration = tasmota_driver
+
+    # Run TasmotaAdapter for a specified duration and simulate device operations
+    run_autoexec_for_duration(1.1)  # Run for 1.1 seconds
+
+    # Check that the driver's methods were called
+    assert driver.counter_50ms > 0, "Driver's every_50ms should have been called"
+    assert driver.counter_100ms > 0, "Driver's every_100ms should have been called"
+    assert driver.counter_250ms > 0, "Driver's every_250ms should have been called"
+    assert driver.counter_second > 0, "Driver's every_second should have been called"
+
+
+def test_button_pressed(tasmota_driver):
+    tasmota, driver, _ = tasmota_driver
+    tasmota.button_pressed()
+    assert driver.button_press_count == 1, "Driver's button_pressed should have been called once"
+
+
+def test_mqtt_data(tasmota_driver):
+    tasmota, driver, _ = tasmota_driver
+    topic = "test/topic"
+    message = "test message"
+    tasmota.mqtt.publish(topic, message)
+    time.sleep(0.1)  # Ensure the message is processed
+    assert (topic, message) in driver.mqtt_messages, "Driver's mqtt_data should have received the message"
+
+
+def test_save_before_restart(tasmota_driver):
+    tasmota, driver, _ = tasmota_driver
+    tasmota.stop()
+    assert driver.save_before_restart_called, "Driver's save_before_restart should have been called"

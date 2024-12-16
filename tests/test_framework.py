@@ -1,62 +1,64 @@
-import unittest
 import threading
 import time
 import os
+import pytest
 from adapters.tasmota_adapter import TasmotaAdapter
 
 
-class TestAutoexec(unittest.TestCase):
-    def setUp(self):
-        # Create an instance of TasmotaAdapter with a unique EUI
-        self.tasmota = TasmotaAdapter("EUI_TEST")
+@pytest.fixture
+def tasmota_setup():
+    # Create an instance of TasmotaAdapter with a unique EUI
+    tasmota = TasmotaAdapter("EUI_TEST")
 
-        # Path to the test autoexec file
-        self.autoexec_path = os.path.join(os.path.dirname(__file__), "test_autoexec.py")
+    # Path to the test autoexec file
+    autoexec_path = os.path.join(os.path.dirname(__file__), "test_autoexec.py")
 
-        # Create a custom driver for testing
-        class CustomDriver:
-            def __init__(self):
-                self.counter_250ms = 0
+    # Create a custom driver for testing
+    class CustomDriver:
+        def __init__(self):
+            self.counter_250ms = 0
 
-            def every_250ms(self):
-                self.counter_250ms += 1
-                print(f"every_250ms called {self.counter_250ms} times")
+        def every_250ms(self):
+            self.counter_250ms += 1
+            print(f"every_250ms called {self.counter_250ms} times")
 
-            def every_second(self):
-                print("every_second called")
+        def every_second(self):
+            print("every_second called")
 
-        self.driver = CustomDriver()
-        self.tasmota.add_driver(self.driver)
+    driver = CustomDriver()
+    tasmota.add_driver(driver)
 
-        # Start the TasmotaAdapter instance in a separate thread
-        self.autoexec_thread = threading.Thread(target=self.run_tasmota)
-        self.autoexec_thread.daemon = True  # Allows thread to be killed when main thread exits
+    # Function to run tasmota
+    def run_tasmota():
+        tasmota.start(autoexec_path=autoexec_path)
 
-    def run_tasmota(self):
-        self.tasmota.start(autoexec_path=self.autoexec_path)
+    # Start the TasmotaAdapter instance in a separate thread
+    autoexec_thread = threading.Thread(target=run_tasmota)
+    autoexec_thread.daemon = True  # Allows thread to be killed when main thread exits
 
-    def run_autoexec_for_duration(self, duration):
-        self.autoexec_thread.start()
+    # Function to run autoexec for a certain duration
+    def run_autoexec_for_duration(duration):
+        autoexec_thread.start()
         time.sleep(duration)
         print("Stopping autoexec after duration")
         # Stopping autoexec by stopping the TasmotaAdapter instance
-        self.tasmota.stop()
+        tasmota.stop()
+        autoexec_thread.join()
 
-    def test_run_autoexec(self):
-        # Run autoexec for a specified duration and simulate device operations
-        self.run_autoexec_for_duration(0.5)  # Run for 1 seconds
+    yield tasmota, driver, run_autoexec_for_duration
 
-        # Check that the driver `every_250ms` method was called
-        self.assertTrue(
-            self.driver.counter_250ms > 0, "Driver's every_250ms should have been called"
-        )
-
-    def tearDown(self):
-        # Cleanup code after each test
-        if self.autoexec_thread.is_alive():
-            print("Terminating autoexec thread")
-            self.tasmota.stop()
+    # Cleanup after test
+    if autoexec_thread.is_alive():
+        print("Terminating autoexec thread")
+        tasmota.stop()
+        autoexec_thread.join()
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_run_autoexec(tasmota_setup):
+    tasmota, driver, run_autoexec_for_duration = tasmota_setup
+
+    # Run autoexec for a specified duration and simulate device operations
+    run_autoexec_for_duration(0.5)  # Run for 0.5 seconds
+
+    # Check that the driver's `every_250ms` method was called
+    assert driver.counter_250ms > 0, "Driver's every_250ms should have been called"
